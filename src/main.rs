@@ -57,10 +57,17 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         //self.convert_rgb_yuv_shader(&raw);
         self.convert_rgbto_yuv_threaded(&raw);
 
+
         let mut blocks:Vec<u8> = self.linear_block_fast(&self.ycbcr.0);
         //self.linear_to_block_cb_cr(&self.ycbcr.1,&self.ycbcr.2);
        // self.dct_transformation();
+       let start = Instant::now();
         self.fast_dct(&mut blocks);
+        println!("DCT OHNE THREADING: {}", start.elapsed().as_millis());
+        let start = Instant::now();
+        self.threaded_dct(&mut blocks);
+        println!("DCT MIT THREADING: {}", start.elapsed().as_millis());
+
         //speichert letztes bild um vergleich zu ermöglchen sollte wahrscheinlich eher mit ownership gemacht werden todo();
 
         

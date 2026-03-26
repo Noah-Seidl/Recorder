@@ -258,14 +258,14 @@ pub fn inverse_vertical(vector: &mut Vec<f32>){
     }
 }
 
-pub fn dct_matrix(vector: &mut Vec<f32>)
+pub fn dct_matrix(vector: &mut [f32])
 {
     for i in 0..64{
         vector[i] = vector[i] / MATRIX[i];
     }
 }
 
-pub fn inverse_dct_matrix(vector: &mut Vec<f32>)
+pub fn inverse_dct_matrix(vector: &mut [f32])
 {
     for i in 0..64{
         vector[i] = vector[i] * MATRIX[i];

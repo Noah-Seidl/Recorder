@@ -47,26 +47,39 @@ impl GraphicsCaptureApiHandler for capture::Capture {
 
         let mut data = frame.buffer()?;
 
+       let start = Instant::now();
 
 
 
         let raw: &mut [u8] = data.as_nopadding_buffer()?;
 
 
-
-        //self.convert_rgb_yuv_shader(&raw);
+        //convert from rgb to yuv
         self.convert_rgbto_yuv_threaded(&raw);
 
+        //convert from linear to block res
+        let blocks:Vec<u8> = self.linear_block_fast(&self.ycbcr.0);
 
-        let mut blocks:Vec<u8> = self.linear_block_fast(&self.ycbcr.0);
+        //convert from yuv to dct values
+        let dct_values= self.fast_dct(&blocks);
+
+       // println!("Y WERTE:          {:?}", &dct_values[0..64]);
+
+        //convert from dct to yuv
+        let y_blocks = self.inverse_fast_dct(&dct_values);
+
+       // println!("Y DAnach WERTE:   {:?}", &y_blocks[0..64]);
+
+        //convert from yuv blocks to linear
+        let y_linear = self.block_linear_fast(&y_blocks);
+
+
+        self.ycbcr.0 = y_linear;
+
         //self.linear_to_block_cb_cr(&self.ycbcr.1,&self.ycbcr.2);
        // self.dct_transformation();
-       let start = Instant::now();
-        self.fast_dct(&mut blocks);
-        println!("DCT OHNE THREADING: {}", start.elapsed().as_millis());
-        let start = Instant::now();
-        self.threaded_dct(&mut blocks);
-        println!("DCT MIT THREADING: {}", start.elapsed().as_millis());
+
+        println!("Zeitaufwand: {}", start.elapsed().as_millis());
 
         //speichert letztes bild um vergleich zu ermöglchen sollte wahrscheinlich eher mit ownership gemacht werden todo();
 
@@ -75,12 +88,11 @@ impl GraphicsCaptureApiHandler for capture::Capture {
 
         //sendet an anderen thread das Bild
         self.send_ycrcb();
-        let end = start.elapsed().as_millis();
 
         if self.start.elapsed().as_secs() != self.second_last{
             self.second_last = self.start.elapsed().as_secs();
             println!("FPS: {}", self.counter);
-            println!("Berechnung: {}ms", end);
+            println!("Berechnung: {}ms",1);
             self.counter = 0;
         }
         Ok(())

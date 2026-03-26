@@ -1,6 +1,6 @@
 use std::{sync::mpsc, time::Instant, vec};
 
-use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSlice};
+use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
 
 use crate::{fastDct};
 
@@ -64,7 +64,6 @@ impl Capture{
         if self.width == RESULTING_WIDTH {
             block_length = 1;
         }
-
 
         
         y
@@ -248,8 +247,6 @@ impl Capture{
             println!("yuv: Werte: {:?}", &dct_vec[i..i+8]);
         }
 
-        self.inverse_fast_dct(&mut dct_vec);
-
     }
 
 
@@ -288,7 +285,7 @@ impl Capture{
             println!("yuv: Werte: {:?}", &pixels[i..i+8]);
         }
 
-        dct_vec.par_chunks(64)
+        dct_vec.par_chunks_mut(64)
             .enumerate()
             .for_each(|(index, chunk)|{
                 let mut block_f32: Vec<f32> = pixels[index * 64..index * 64 + 64]
@@ -304,9 +301,9 @@ impl Capture{
             });
      
 
-        println!("Yuv werte REAL:");
+        println!("DCT WERTE THREADED:");
         for i in (0..64).step_by(8){
-            println!("yuv: Werte: {:?}", &dct_vec[i..i+8]);
+            println!("DCT: Werte: {:?}", &dct_vec[i..i+8]);
         }
 
         self.inverse_fast_dct(&mut dct_vec);

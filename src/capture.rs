@@ -1,6 +1,6 @@
 use std::{sync::mpsc, time::Instant, vec};
 
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSlice};
 
 use crate::{fastDct};
 
@@ -279,27 +279,29 @@ impl Capture{
 
     //schneller dct mit par iter:
 
+
     pub(crate) fn threaded_dct(&self,pixels:&mut Vec<u8>)
     {
-        let mut dct_vec:Vec<f32> = Vec::with_capacity(RESULTING_RESOLUTION as usize);
-
+        let mut dct_vec:Vec<f32> = vec![0f32;pixels.len()];
         println!("Yuv werte REAL:");
         for i in (0..64).step_by(8){
             println!("yuv: Werte: {:?}", &pixels[i..i+8]);
         }
 
-        //Könnte man mit par iter chunk warscheinlich um eineiges schneller machen threaded
-        for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
-            let mut block_f32: Vec<f32> = pixels[block..block + 64]
+        dct_vec.par_chunks(64)
+            .enumerate()
+            .for_each(|(index, chunk)|{
+                let mut block_f32: Vec<f32> = pixels[index * 64..index * 64 + 64]
                 .iter()
                 .map(|&p| p as f32)
                 .collect();
-            fastDct::transform_horizontal(&mut block_f32);
-            fastDct::transform_vertical(&mut block_f32);
-            fastDct::dct_matrix(&mut block_f32);
-            dct_vec.extend_from_slice(&block_f32);
-        }
 
+                fastDct::transform_horizontal(&mut block_f32);
+                fastDct::transform_vertical(&mut block_f32);
+                fastDct::dct_matrix(&mut block_f32);
+
+                chunk.copy_from_slice(&block_f32);
+            });
      
 
         println!("Yuv werte REAL:");

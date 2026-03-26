@@ -215,52 +215,66 @@ impl Capture{
         vec_block
     }
 
+    pub(crate) fn block_linear_fast(&self, pixels:& Vec<u8>) -> Vec<u8>{
+        let block_size = 8;
+        let block_area = block_size * block_size;
+        let blocks_x = RESULTING_WIDTH as usize / block_size;
+        let blocks_y = RESULTING_HEIGHT as usize / block_size;
 
+        let mut linear_block: Vec<u8> = vec![0u8; RESULTING_RESOLUTION as usize];
+
+        for global_y in 0..blocks_y{
+            for global_x in 0..blocks_x{
+                for local_y in 0..block_size{
+                    for local_x in 0..block_size{
+                        let y = global_y * block_size + local_y;
+                        let x = global_x * block_size + local_x;
+
+                        let linear_index = x + y * RESULTING_WIDTH as usize;
+                        let block_index = (global_y * blocks_x + global_x) * block_area + local_y * block_size + local_x;
+
+                        linear_block[linear_index] = pixels[block_index];
+                    }
+                }
+            }
+        }
+
+        linear_block
+    }
 
 
     //müsste man auch für cr und cb implementieren
-    pub(crate) fn fast_dct(&self,pixels:&mut Vec<u8>)
+    pub(crate) fn fast_dct(&self,pixels:& Vec<u8>) -> Vec<f32>
     {
         let mut dct_vec:Vec<f32> = Vec::with_capacity(RESULTING_RESOLUTION as usize);
 
-        println!("Yuv werte REAL:");
-        for i in (0..64).step_by(8){
-            println!("yuv: Werte: {:?}", &pixels[i..i+8]);
-        }
-
         //Könnte man mit par iter chunk warscheinlich um eineiges schneller machen threaded
         for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
-            let mut block_f32: Vec<f32> = pixels[block..block + 64]
-                .iter()
-                .map(|&p| p as f32)
-                .collect();
+            let mut block_f32 = [0.0f32; 64];  // liegt auf dem Stack, kein malloc/free
+            for (i, &p) in pixels[block..block+64].iter().enumerate() {
+                block_f32[i] = p as f32;
+            }
             fastDct::transform_horizontal(&mut block_f32);
             fastDct::transform_vertical(&mut block_f32);
             fastDct::dct_matrix(&mut block_f32);
             dct_vec.extend_from_slice(&block_f32);
         }
 
-
-
-        println!("Yuv werte REAL:");
-        for i in (0..64).step_by(8){
-            println!("yuv: Werte: {:?}", &dct_vec[i..i+8]);
-        }
-
+        dct_vec
     }
 
 
 
-    pub(crate) fn inverse_fast_dct(&self,pixels:&mut Vec<f32>)
+    pub(crate) fn inverse_fast_dct(&self,pixels:& Vec<f32>) ->Vec<u8>
     {
         let mut dct_vec:Vec<f32> = Vec::with_capacity(RESULTING_RESOLUTION as usize);
 
         //hier durch threading auch schneller möglich
         for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
             let mut block_f32: Vec<f32> = pixels[block..block + 64].to_vec();
+            fastDct::inverse_dct_matrix(&mut block_f32);
             fastDct::inverse_horizontal(&mut block_f32);
             fastDct::inverse_vertical(&mut block_f32);
-            fastDct::inverse_dct_matrix(&mut block_f32);
             dct_vec.extend_from_slice(&block_f32);
         }
 
@@ -268,30 +282,22 @@ impl Capture{
             .map(|&f| f.round() as u8)
             .collect();
 
-        println!("Inverse DCT:");
-        for i in (0..64).step_by(8){
-            println!("yuv: Werte: {:?}", &yuv_dct[i..i+8]);
-        }
+        yuv_dct
     }
 
-    //schneller dct mit par iter:
-
-
+    
+    //lansgamer als serieller dct func
     pub(crate) fn threaded_dct(&self,pixels:&mut Vec<u8>)
     {
         let mut dct_vec:Vec<f32> = vec![0f32;pixels.len()];
-        println!("Yuv werte REAL:");
-        for i in (0..64).step_by(8){
-            println!("yuv: Werte: {:?}", &pixels[i..i+8]);
-        }
 
         dct_vec.par_chunks_mut(64)
             .enumerate()
             .for_each(|(index, chunk)|{
-                let mut block_f32: Vec<f32> = pixels[index * 64..index * 64 + 64]
-                .iter()
-                .map(|&p| p as f32)
-                .collect();
+                let mut block_f32 = [0.0f32; 64];  // liegt auf dem Stack, kein malloc/free
+                for (i, &p) in pixels[index * 64..index * 64 + 64].iter().enumerate() {
+                    block_f32[i] = p as f32;
+                }
 
                 fastDct::transform_horizontal(&mut block_f32);
                 fastDct::transform_vertical(&mut block_f32);
@@ -299,12 +305,6 @@ impl Capture{
 
                 chunk.copy_from_slice(&block_f32);
             });
-     
-
-        println!("DCT WERTE THREADED:");
-        for i in (0..64).step_by(8){
-            println!("DCT: Werte: {:?}", &dct_vec[i..i+8]);
-        }
 
         self.inverse_fast_dct(&mut dct_vec);
 

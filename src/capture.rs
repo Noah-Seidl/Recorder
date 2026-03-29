@@ -215,6 +215,40 @@ impl Capture{
         vec_block
     }
 
+    pub(crate) fn linear_block_fast_crcb(&self,cr:& Vec<u8>,cb:& Vec<u8>) -> (Vec<u8>,Vec<u8>) {
+        let block_size = 8;
+        let block_area = block_size * block_size;
+        let blocks_x = (RESULTING_WIDTH / 2) / block_size;
+        let blocks_y = (RESULTING_HEIGHT / 2) / block_size;
+
+        let mut cr_block: Vec<u8> = vec![0u8; cr.len()];
+        let mut cb_block: Vec<u8> = vec![0u8; cr.len()];
+
+        for global_y in 0..blocks_y{
+            for global_x in 0..blocks_x{
+                for local_y in 0..block_size{
+                    for local_x in 0..block_size{
+                        let y = global_y * block_size + local_y;
+                        let x = global_x * block_size + local_x;
+
+                        let linear_index = x + y * RESULTING_WIDTH / 2;
+                        let block_index = (global_y * blocks_x + global_x) * block_area + local_y * block_size + local_x;
+
+                        cr_block[block_index as usize] = cr[linear_index as usize];
+                        cb_block[block_index as usize] = cb[linear_index as usize];
+                    }
+                }
+            }
+        }
+
+        cr_block.resize(cb.len() + 4 * (1920 / 2), 128);
+        cb_block.resize(cb.len() + 4 * (1920 / 2), 128);
+
+        (cr_block,cb_block)
+    }
+    
+
+
     pub(crate) fn block_linear_fast(&self, pixels:& Vec<u8>) -> Vec<u8>{
         let block_size = 8;
         let block_area = block_size * block_size;
@@ -242,6 +276,40 @@ impl Capture{
         linear_block
     }
 
+    pub(crate) fn block_linear_fast_crcb(&self,cr:& Vec<u8>,cb:& Vec<u8>) -> (Vec<u8>,Vec<u8>) {
+        let block_size = 8;
+        let block_area = block_size * block_size;
+        let blocks_x = (RESULTING_WIDTH / 2) / block_size;
+        let blocks_y = (RESULTING_HEIGHT / 2) / block_size;
+
+        let mut cr_block: Vec<u8> = vec![0u8; cr.len()];
+        let mut cb_block: Vec<u8> = vec![0u8; cr.len()];
+
+        for global_y in 0..blocks_y{
+            for global_x in 0..blocks_x{
+                for local_y in 0..block_size{
+                    for local_x in 0..block_size{
+                        let y = global_y * block_size + local_y;
+                        let x = global_x * block_size + local_x;
+
+                        let linear_index = x + y * RESULTING_WIDTH / 2;
+                        let block_index = (global_y * blocks_x + global_x) * block_area + local_y * block_size + local_x;
+
+                        cr_block[linear_index as usize] = cr[block_index as usize];
+                        cb_block[linear_index as usize] = cb[block_index as usize];
+                    }
+                }
+            }
+        }
+
+        cr_block.resize(RESULTING_RESOLUTION as usize / 4, 0);
+        cb_block.resize(RESULTING_RESOLUTION as usize / 4, 0);
+
+        (cr_block,cb_block)
+    }
+
+
+
 
     //müsste man auch für cr und cb implementieren
     pub(crate) fn fast_dct(&self,pixels:& Vec<u8>) -> Vec<f32>
@@ -250,20 +318,41 @@ impl Capture{
 
         //Könnte man mit par iter chunk warscheinlich um eineiges schneller machen threaded
         for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
-            let mut block_f32 = [0.0f32; 64];  // liegt auf dem Stack, kein malloc/free
+            let mut block_f32 = [0.0f32; 64]; 
             for (i, &p) in pixels[block..block+64].iter().enumerate() {
                 block_f32[i] = p as f32;
             }
-            fastDct::transform_horizontal(&mut block_f32);
-            fastDct::transform_vertical(&mut block_f32);
-            fastDct::dct_matrix(&mut block_f32);
+            fastDct::dct_quant(&mut block_f32);
             dct_vec.extend_from_slice(&block_f32);
         }
 
         dct_vec
     }
 
+    pub(crate) fn fast_dct_crcb(&self,cr:& Vec<u8>, cb: & Vec<u8>) -> (Vec<f32>,Vec<f32>)
+    {
+        let mut dct_cr:Vec<f32> = Vec::with_capacity(cr.len() as usize);
+        let mut dct_cb:Vec<f32> = Vec::with_capacity(cr.len() as usize);
 
+        //Könnte man mit par iter chunk warscheinlich um eineiges schneller machen threaded
+        for block in (0..cr.len()).step_by(64){
+            let mut cr_block_f32 = [0.0f32; 64]; 
+            let mut cb_block_f32 = [0.0f32; 64]; 
+
+            for (i,(&cr,&cb)) in cr[block..block+64].iter().zip(cb[block..block+64].iter()).enumerate() {
+                cr_block_f32[i] = cr as f32;
+                cb_block_f32[i] = cb as f32;
+            }
+
+            fastDct::dct_quant(&mut cr_block_f32);
+            fastDct::dct_quant(&mut cb_block_f32);
+            
+            dct_cr.extend_from_slice(&cr_block_f32);
+            dct_cb.extend_from_slice(&cb_block_f32);
+        }
+
+        (dct_cr,dct_cb)
+    }
 
     pub(crate) fn inverse_fast_dct(&self,pixels:& Vec<f32>) ->Vec<u8>
     {
@@ -272,9 +361,7 @@ impl Capture{
         //hier durch threading auch schneller möglich
         for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
             let mut block_f32: Vec<f32> = pixels[block..block + 64].to_vec();
-            fastDct::inverse_dct_matrix(&mut block_f32);
-            fastDct::inverse_horizontal(&mut block_f32);
-            fastDct::inverse_vertical(&mut block_f32);
+            fastDct::inverse_dct_quant(&mut block_f32);
             dct_vec.extend_from_slice(&block_f32);
         }
 
@@ -285,7 +372,46 @@ impl Capture{
         yuv_dct
     }
 
+    pub(crate) fn inverse_fast_dct_crcb(&self,cr:& Vec<f32>, cb: & Vec<f32>) -> (Vec<u8>,Vec<u8>)
+    {
+        let mut dct_cr:Vec<f32> = Vec::with_capacity(cr.len() as usize);
+        let mut dct_cb:Vec<f32> = Vec::with_capacity(cb.len() as usize);
+
+        //Könnte man mit par iter chunk warscheinlich um eineiges schneller machen threaded
+        for block in (0..cr.len()).step_by(64){
+            let mut cr_block_f32 = cr[block..block+64].to_vec();
+            let mut cb_block_f32 = cb[block..block+64].to_vec(); 
+
+            fastDct::inverse_dct_quant(&mut cr_block_f32);
+            fastDct::inverse_dct_quant(&mut cb_block_f32);
+            
+            dct_cr.extend_from_slice(&cr_block_f32);
+            dct_cb.extend_from_slice(&cb_block_f32);
+        }
+
+        let cr: Vec<u8> = dct_cr.iter()
+            .map(|&f| f.round() as u8)
+            .collect();
+
+        let cb: Vec<u8> = dct_cb.iter()
+            .map(|&f| f.round() as u8)
+            .collect();
+
+        (cr,cb)
+    }
     
+
+
+
+
+
+
+
+
+
+
+
+
     //lansgamer als serieller dct func
     pub(crate) fn threaded_dct(&self,pixels:&mut Vec<u8>)
     {

@@ -59,21 +59,25 @@ impl GraphicsCaptureApiHandler for capture::Capture {
 
         //convert from linear to block res
         let blocks:Vec<u8> = self.linear_block_fast(&self.ycbcr.0);
+        let (cr,cb)= self.linear_block_fast_crcb(& self.ycbcr.1, & self.ycbcr.2);
 
         //convert from yuv to dct values
         let dct_values= self.fast_dct(&blocks);
-
-       // println!("Y WERTE:          {:?}", &dct_values[0..64]);
+        let (cr,cb)= self.fast_dct_crcb(&cr, &cb);
 
         //convert from dct to yuv
         let y_blocks = self.inverse_fast_dct(&dct_values);
+        let (cr,cb)= self.inverse_fast_dct_crcb(&cr, &cb);
 
        // println!("Y DAnach WERTE:   {:?}", &y_blocks[0..64]);
 
         //convert from yuv blocks to linear
         let y_linear = self.block_linear_fast(&y_blocks);
+        let (cr,cb)= self.block_linear_fast_crcb(&cr, &cb);
 
-
+        
+        self.ycbcr.1 = cr;
+        self.ycbcr.2 = cb;
         self.ycbcr.0 = y_linear;
 
         //self.linear_to_block_cb_cr(&self.ycbcr.1,&self.ycbcr.2);

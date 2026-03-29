@@ -1,6 +1,18 @@
 use std::vec;
 //https://stackoverflow.com/questions/29215879/how-can-i-generalize-the-quantization-matrix-in-jpeg-compression
 
+pub fn dct_quant(vector: &mut [f32]){
+    transform_horizontal(vector);
+    transform_vertical(vector);
+    dct_matrix(vector);
+}
+
+pub fn inverse_dct_quant(vector: &mut [f32])
+{
+    inverse_dct_matrix(vector);
+    inverse_horizontal(vector);
+    inverse_vertical(vector);
+}
 
 pub fn transform_horizontal(vector: &mut [f32]){
     // Algorithm by Arai, Agui, Nakajima, 1988. For details, see:
@@ -106,7 +118,7 @@ pub fn transform_vertical(vector: &mut [f32]) {
  * Computes the scaled DCT type III on the given length-8 array in place.
  * The inverse of this function is transform(), except for rounding errors.
  */
-pub fn inverse_transform(vector: &mut Vec<f32>) {
+pub fn inverse_transform(vector: &mut [f32]) {
     // A straightforward inverse of the forward algorithm
     let v15 = vector[0] / S[0];
     let v26 = vector[1] / S[1];
@@ -155,7 +167,7 @@ pub fn inverse_transform(vector: &mut Vec<f32>) {
 }
 
 
-pub fn inverse_horizontal(vector: &mut Vec<f32>){
+pub fn inverse_horizontal(vector: &mut [f32]){
     for i in (0..vector.len()).step_by(8){
         let v15 = vector[0 + i] / S[0];
         let v26 = vector[1 + i] / S[1];
@@ -207,7 +219,7 @@ pub fn inverse_horizontal(vector: &mut Vec<f32>){
 }
 
 
-pub fn inverse_vertical(vector: &mut Vec<f32>){
+pub fn inverse_vertical(vector: &mut [f32]){
     for col in 0..8{
         let v15 = vector[8 * 0 + col] / S[0];
         let v26 = vector[8 * 1 + col] / S[1];

@@ -6,9 +6,9 @@ use crate::{fastDct};
 
 const BLOCK_SIZE: u32 = 8;
 
-const RESULTING_WIDTH:u32 = 1920;
-const RESULTING_HEIGHT:u32 = 1080;
-const RESULTING_RESOLUTION:u32 = RESULTING_HEIGHT * RESULTING_WIDTH;
+const RESULTING_WIDTH:usize = 1920;
+const RESULTING_HEIGHT:usize = 1080;
+const RESULTING_RESOLUTION:usize = RESULTING_HEIGHT * RESULTING_WIDTH;
 const PI:f32 = std::f32::consts::PI;
 const MATRIX: [f32; 64] = [
     16.0, 11.0, 10.0, 16.0, 24.0, 40.0, 51.0, 61.0,
@@ -29,6 +29,7 @@ pub(crate) struct Capture {
     pub(crate) height:u32,
     sender: mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>,
     pub(crate) second_last : u64,
+    buffer_y: Vec<u8>,  //Statt immer wieder neuen vec zu erstellen einfach den buffer benutzen
 }
 
 
@@ -46,6 +47,7 @@ impl Capture{
             sender,
             second_last: 0,
             ycbcr: (Vec::new(), Vec::new(), Vec::new()) ,
+            buffer_y: vec![0u8;RESULTING_RESOLUTION],
         })
     } 
 
@@ -61,7 +63,7 @@ impl Capture{
         
         let mut block_length = 2;
 
-        if self.width == RESULTING_WIDTH {
+        if self.width == RESULTING_WIDTH as u32{
             block_length = 1;
         }
 
@@ -413,6 +415,7 @@ impl Capture{
 
 
     //lansgamer als serieller dct func
+    //mehr testen nötig um schnelleren ablauf zu gewährleisten in kleiner teile aufteilen
     pub(crate) fn threaded_dct(&self,pixels:&mut Vec<u8>)
     {
         let mut dct_vec:Vec<f32> = vec![0f32;pixels.len()];
@@ -433,7 +436,6 @@ impl Capture{
             });
 
         self.inverse_fast_dct(&mut dct_vec);
-
     }
 
 
@@ -461,7 +463,7 @@ impl Capture{
 
         let mut block_length = 2;
 
-        if self.width == RESULTING_WIDTH {
+        if self.width == RESULTING_WIDTH as u32 {
             block_length = 1;
         }
         

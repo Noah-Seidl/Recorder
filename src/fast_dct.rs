@@ -270,17 +270,19 @@ pub fn inverse_vertical(vector: &mut [f32]){
     }
 }
 
+const COMPRESSION_STRENGTH:f32 = 1.0;
+
 pub fn dct_matrix(vector: &mut [f32])
 {
     for i in 0..64{
-        vector[i] = vector[i] / MATRIX[i];
+        vector[i] = vector[i] / (MATRIX[i] * COMPRESSION_STRENGTH);
     }
 }
 
 pub fn inverse_dct_matrix(vector: &mut [f32])
 {
     for i in 0..64{
-        vector[i] = vector[i] * MATRIX[i];
+        vector[i] = vector[i] * MATRIX[i] * COMPRESSION_STRENGTH;
     }
 }
 

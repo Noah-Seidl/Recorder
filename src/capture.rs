@@ -1,8 +1,8 @@
-use std::{sync::mpsc, time::Instant, vec};
+use std::{collections::HashMap, sync::mpsc, time::Instant, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
 
-use crate::{fast_dct};
+use crate::{fast_dct, huffcode::{self, HuffCode}};
 
 const BLOCK_SIZE: u32 = 8;
 
@@ -41,6 +41,7 @@ pub(crate) struct Capture {
     sender: mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>,
     pub(crate) second_last : u64,
     buffer_y: Vec<u8>,  //Statt immer wieder neuen vec zu erstellen einfach den buffer benutzen
+    huff_table:HashMap<(u8, u8),HuffCode>
 }
 
 
@@ -59,6 +60,7 @@ impl Capture{
             second_last: 0,
             ycbcr: (Vec::new(), Vec::new(), Vec::new()) ,
             buffer_y: vec![0u8;RESULTING_RESOLUTION],
+            huff_table: huffcode::jpeg_ac_luminance_table(),
         })
     } 
 
@@ -325,7 +327,7 @@ impl Capture{
 
 
     //müsste man auch für cr und cb implementieren
-    pub(crate) fn fast_dct(&self,pixels:& Vec<u8>) -> Vec<f32>
+    pub(crate) fn fast_dct(&self,pixels:& Vec<u8>) -> Vec<i16>
     {
         let mut dct_vec:Vec<f32> = Vec::with_capacity(RESULTING_RESOLUTION as usize);
 
@@ -339,7 +341,7 @@ impl Capture{
             dct_vec.extend_from_slice(&block_f32);
         }
 
-        dct_vec
+        dct_vec.iter().map(|x|{ (*x).round() as i16}).collect()
     }
 
     pub(crate) fn fast_dct_crcb(&self,cr:& Vec<u8>, cb: & Vec<u8>) -> (Vec<f32>,Vec<f32>)
@@ -367,9 +369,11 @@ impl Capture{
         (dct_cr,dct_cb)
     }
 
-    pub(crate) fn inverse_fast_dct(&self,pixels:& Vec<f32>) ->Vec<u8>
+    pub(crate) fn inverse_fast_dct(&self,pixels:& Vec<i16>) ->Vec<u8>
     {
         let mut dct_vec:Vec<f32> = Vec::with_capacity(RESULTING_RESOLUTION as usize);
+        let pixels:Vec<f32> = pixels.iter().map(|x|{ *x as f32}).collect();
+
 
         //hier durch threading auch schneller möglich
         for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
@@ -415,15 +419,15 @@ impl Capture{
     
 
 
-    pub(crate) fn zigzag(&self,vector:&Vec<f32>) ->Vec<i16>{
+    pub(crate) fn zigzag(&self,vector:&Vec<i16>) ->Vec<i16>{
         let mut zigzag = vec![0i16;vector.len()];
         for i in 0..vector.len(){
-            zigzag[i] = vector[((i / 64) * 64) + ZIGZAG_ORDER[i%64]] as i16;
+            zigzag[i] = vector[((i / 64) * 64) + ZIGZAG_ORDER[i%64]];
         }
         zigzag
     }
 
-        pub(crate) fn inverse_zigzag(&self,vector:&Vec<i16>) ->Vec<f32>{
+    pub(crate) fn inverse_zigzag(&self,vector:&Vec<i16>) ->Vec<f32>{
         let mut zigzag = vec![0f32;vector.len()];
         for i in 0..vector.len(){
             zigzag[((i / 64) * 64) + ZIGZAG_ORDER[i%64]] = vector[i] as f32;
@@ -431,7 +435,7 @@ impl Capture{
         zigzag
     }
 
-    pub(crate) fn rle_encoding(&self,vector:&Vec<i16>) ->Vec<(usize,i16)>
+    pub(crate) fn rle_encoding(&self,vector:&Vec<i16>) ->Vec<(usize, i16)>
     {
         let mut rle:Vec<(usize,i16)> = Vec::new();
         let mut zero_counter = 0;
@@ -440,23 +444,33 @@ impl Capture{
         for i in 0..vector.len(){
             if i % 64 == 0{
                 zero_counter = 0;
+                rle.push((17,vector[i]));
                 continue;
             }
 
             if i % 64 == 63{
                 if vector[i] == 0{
+                    while *rle.last().unwrap() == (15,0) {
+                        rle.pop();
+                    }
                     rle.push((0,0));
                     zero_counter = 0;
                 }else{
-                    rle.push((zero_counter,vector[i]));
+                    rle.push((zero_counter, vector[i]));
                     zero_counter = 0;
                 }
+                continue;
             }
             //wenn vector i 16 al 0 ist muss 16 o in tuppel und fals dann aber doch ende kommt muss es wieder gepoppt werden und nur (0,0) reingeschireben werden also schreibt man und wenn es eob ist while schleife mit allen 0 davo weg
             if vector[i] == 0{
                 zero_counter+= 1;
+
+                if zero_counter == 16{
+                    zero_counter = 0;
+                    rle.push((15,0));
+                }
             }else{
-                rle.push((zero_counter,vector[i]));
+                rle.push((zero_counter, vector[i]));
                 zero_counter = 0;
             }
         }
@@ -464,6 +478,15 @@ impl Capture{
         rle
     }
 
+
+
+    fn categorie(&self, x:i16)->usize{
+        if x == 0{
+            0
+        }else{
+            (x.abs() as f32).log2().floor() as usize + 1
+        }
+    }
 
 
 
@@ -489,12 +512,10 @@ impl Capture{
                 chunk.copy_from_slice(&block_f32);
             });
 
-        self.inverse_fast_dct(&mut dct_vec);
+        //self.inverse_fast_dct(&mut dct_vec);
     }
 
-
-
-
+   
 
 
     pub fn send_ycrcb(&self)

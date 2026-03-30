@@ -14,6 +14,7 @@ use windows_capture::settings::{
 mod fast_dct;
 mod capture;
 mod sdl_window;
+mod huffcode;
 
 impl GraphicsCaptureApiHandler for capture::Capture {
 
@@ -68,18 +69,19 @@ impl GraphicsCaptureApiHandler for capture::Capture {
 
         let zigzagtime = Instant::now();
         let zigzag = self.zigzag(&dct_values);
-        println!("ZIGZAG TIME: {}", zigzagtime.elapsed().as_millis());
-        for i in (0..64).step_by(8){
+     //   println!("ZIGZAG TIME: {}", zigzagtime.elapsed().as_millis());
+        /*for i in (0..64).step_by(8){
             println!("DCT WERTE: {:?}", &zigzag[i + 0..8 + i]);
         }
         for i in (0..64).step_by(8){
             println!("DCT WERTE: {:?}", &dct_values[i + 0..8 + i]);
         }
-
+*/
+        let start = Instant::now();
         let rle = self.rle_encoding(&zigzag);
 
         println!("WERTE: {:?}", &rle[0..20]);
-
+        println!("RLE DAUER: {}", start.elapsed().as_millis());
         //convert from dct to yuv
         let y_blocks = self.inverse_fast_dct(&dct_values);
         let (cr,cb)= self.inverse_fast_dct_crcb(&cr, &cb);
@@ -98,7 +100,7 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         //self.linear_to_block_cb_cr(&self.ycbcr.1,&self.ycbcr.2);
        // self.dct_transformation();
 
-        println!("Zeitaufwand: {}", start.elapsed().as_millis());
+       // println!("Zeitaufwand: {}", start.elapsed().as_millis());
 
         //speichert letztes bild um vergleich zu ermöglchen sollte wahrscheinlich eher mit ownership gemacht werden todo();
 

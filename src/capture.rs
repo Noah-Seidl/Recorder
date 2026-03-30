@@ -2,7 +2,7 @@ use std::{sync::mpsc, time::Instant, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
 
-use crate::{fastDct};
+use crate::{fast_dct};
 
 const BLOCK_SIZE: u32 = 8;
 
@@ -19,6 +19,17 @@ const MATRIX: [f32; 64] = [
     24.0, 35.0, 55.0, 64.0, 81.0, 104.0, 113.0, 92.0,
     49.0, 64.0, 78.0, 87.0, 103.0, 121.0, 120.0, 101.0,
     72.0, 92.0, 95.0, 98.0, 112.0, 100.0, 103.0, 99.0,
+];
+
+const ZIGZAG_ORDER:[usize;64] = [
+     0,  1,  8, 16,  9,  2,  3, 10,
+    17, 24, 32, 25, 18, 11,  4,  5,
+    12, 19, 26, 33, 40, 48, 41, 34,
+    27, 20, 13,  6,  7, 14, 21, 28,
+    35, 42, 49, 56, 57, 50, 43, 36,
+    29, 22, 15, 23, 30, 37, 44, 51,
+    58, 59, 52, 45, 38, 31, 39, 46,
+    53, 60, 61, 54, 47, 55, 62, 63
 ];
 
 pub(crate) struct Capture {
@@ -324,7 +335,7 @@ impl Capture{
             for (i, &p) in pixels[block..block+64].iter().enumerate() {
                 block_f32[i] = p as f32;
             }
-            fastDct::dct_quant(&mut block_f32);
+            fast_dct::dct_quant(&mut block_f32);
             dct_vec.extend_from_slice(&block_f32);
         }
 
@@ -346,8 +357,8 @@ impl Capture{
                 cb_block_f32[i] = cb as f32;
             }
 
-            fastDct::dct_quant(&mut cr_block_f32);
-            fastDct::dct_quant(&mut cb_block_f32);
+            fast_dct::dct_quant(&mut cr_block_f32);
+            fast_dct::dct_quant(&mut cb_block_f32);
             
             dct_cr.extend_from_slice(&cr_block_f32);
             dct_cb.extend_from_slice(&cb_block_f32);
@@ -363,7 +374,7 @@ impl Capture{
         //hier durch threading auch schneller möglich
         for block in (0..RESULTING_RESOLUTION as usize).step_by(64){
             let mut block_f32: Vec<f32> = pixels[block..block + 64].to_vec();
-            fastDct::inverse_dct_quant(&mut block_f32);
+            fast_dct::inverse_dct_quant(&mut block_f32);
             dct_vec.extend_from_slice(&block_f32);
         }
 
@@ -384,8 +395,8 @@ impl Capture{
             let mut cr_block_f32 = cr[block..block+64].to_vec();
             let mut cb_block_f32 = cb[block..block+64].to_vec(); 
 
-            fastDct::inverse_dct_quant(&mut cr_block_f32);
-            fastDct::inverse_dct_quant(&mut cb_block_f32);
+            fast_dct::inverse_dct_quant(&mut cr_block_f32);
+            fast_dct::inverse_dct_quant(&mut cb_block_f32);
             
             dct_cr.extend_from_slice(&cr_block_f32);
             dct_cb.extend_from_slice(&cb_block_f32);
@@ -404,11 +415,54 @@ impl Capture{
     
 
 
+    pub(crate) fn zigzag(&self,vector:&Vec<f32>) ->Vec<i16>{
+        let mut zigzag = vec![0i16;vector.len()];
+        for i in 0..vector.len(){
+            zigzag[i] = vector[((i / 64) * 64) + ZIGZAG_ORDER[i%64]] as i16;
+        }
+        zigzag
+    }
 
+        pub(crate) fn inverse_zigzag(&self,vector:&Vec<i16>) ->Vec<f32>{
+        let mut zigzag = vec![0f32;vector.len()];
+        for i in 0..vector.len(){
+            zigzag[((i / 64) * 64) + ZIGZAG_ORDER[i%64]] = vector[i] as f32;
+        }
+        zigzag
+    }
 
+    pub(crate) fn rle_encoding(&self,vector:&Vec<i16>) ->Vec<(usize,i16)>
+    {
+        let mut rle:Vec<(usize,i16)> = Vec::new();
+        let mut zero_counter = 0;
+        
 
+        for i in 0..vector.len(){
+            if i % 64 == 0{
+                zero_counter = 0;
+                continue;
+            }
 
+            if i % 64 == 63{
+                if vector[i] == 0{
+                    rle.push((0,0));
+                    zero_counter = 0;
+                }else{
+                    rle.push((zero_counter,vector[i]));
+                    zero_counter = 0;
+                }
+            }
+            //wenn vector i 16 al 0 ist muss 16 o in tuppel und fals dann aber doch ende kommt muss es wieder gepoppt werden und nur (0,0) reingeschireben werden also schreibt man und wenn es eob ist while schleife mit allen 0 davo weg
+            if vector[i] == 0{
+                zero_counter+= 1;
+            }else{
+                rle.push((zero_counter,vector[i]));
+                zero_counter = 0;
+            }
+        }
 
+        rle
+    }
 
 
 
@@ -428,9 +482,9 @@ impl Capture{
                     block_f32[i] = p as f32;
                 }
 
-                fastDct::transform_horizontal(&mut block_f32);
-                fastDct::transform_vertical(&mut block_f32);
-                fastDct::dct_matrix(&mut block_f32);
+                fast_dct::transform_horizontal(&mut block_f32);
+                fast_dct::transform_vertical(&mut block_f32);
+                fast_dct::dct_matrix(&mut block_f32);
 
                 chunk.copy_from_slice(&block_f32);
             });

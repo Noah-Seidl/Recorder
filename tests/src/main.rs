@@ -4,7 +4,7 @@ use rayon::{iter::{IndexedParallelIterator, ParallelIterator}, slice::ParallelSl
 
 fn main() {
 
-    let mut vector = vec![0u32;10];
-    vector[5] = 10;
-    println!("VEctor: {:?}", &vector[..]);
+    let mut vector = vec![2.3f32;7];
+    let vec:Vec<u8> = vector.iter().map(|x|{*x as u8}).collect();
+    println!("VEC u8: {:?}" ,&vec[..]);
 }

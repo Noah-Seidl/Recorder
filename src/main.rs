@@ -11,7 +11,7 @@ use windows_capture::settings::{
     MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
 };
 
-mod fastDct;
+mod fast_dct;
 mod capture;
 mod sdl_window;
 
@@ -64,6 +64,21 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         //convert from yuv to dct values
         let dct_values= self.fast_dct(&blocks);
         let (cr,cb)= self.fast_dct_crcb(&cr, &cb);
+
+
+        let zigzagtime = Instant::now();
+        let zigzag = self.zigzag(&dct_values);
+        println!("ZIGZAG TIME: {}", zigzagtime.elapsed().as_millis());
+        for i in (0..64).step_by(8){
+            println!("DCT WERTE: {:?}", &zigzag[i + 0..8 + i]);
+        }
+        for i in (0..64).step_by(8){
+            println!("DCT WERTE: {:?}", &dct_values[i + 0..8 + i]);
+        }
+
+        let rle = self.rle_encoding(&zigzag);
+
+        println!("WERTE: {:?}", &rle[0..20]);
 
         //convert from dct to yuv
         let y_blocks = self.inverse_fast_dct(&dct_values);

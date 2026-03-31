@@ -44,11 +44,9 @@ impl GraphicsCaptureApiHandler for capture::Capture {
 
         self.width  = frame.width();
         self.height = frame.height();
-        let start = Instant::now();
 
         let mut data = frame.buffer()?;
 
-       let start = Instant::now();
 
 
 
@@ -66,27 +64,42 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         let dct_values= self.fast_dct(&blocks);
         let (cr,cb)= self.fast_dct_crcb(&cr, &cb);
 
+        //zigzag
+        let zigzagy = self.zigzag(&dct_values);
+        let zigzagcr = self.zigzag(&cr);
+        let zigzagcb = self.zigzag(&cb);
 
-        let zigzagtime = Instant::now();
-        let zigzag = self.zigzag(&dct_values);
-     //   println!("ZIGZAG TIME: {}", zigzagtime.elapsed().as_millis());
-        /*for i in (0..64).step_by(8){
-            println!("DCT WERTE: {:?}", &zigzag[i + 0..8 + i]);
-        }
         for i in (0..64).step_by(8){
-            println!("DCT WERTE: {:?}", &dct_values[i + 0..8 + i]);
+            println!("DCT WERTE: {:?}", &zigzagy[i + 0..8 + i]);
         }
-*/
-        let start = Instant::now();
-        let rle = self.rle_encoding(&zigzag);
+ 
+
+        let rle = self.rle_encoding(&zigzagy);
+        let rlecr = self.rle_encoding(&zigzagcr);
+        let rlecb = self.rle_encoding(&zigzagcb);
 
         println!("WERTE: {:?}", &rle[0..20]);
-        println!("RLE DAUER: {}", start.elapsed().as_millis());
-        //convert from dct to yuv
-        let y_blocks = self.inverse_fast_dct(&dct_values);
-        let (cr,cb)= self.inverse_fast_dct_crcb(&cr, &cb);
+        
+        let werte = self.rle_decoding(&rle);
+        let wertecr = self.rle_decoding(&rlecr);
+        let wertecb = self.rle_decoding(&rlecb);
 
-       // println!("Y DAnach WERTE:   {:?}", &y_blocks[0..64]);
+
+        for i in (0..64).step_by(8){
+            println!("DCT WERTE: {:?}", &werte[i + 0..8 + i]);
+        }
+
+        let unzigzag = self.inverse_zigzag(&werte);
+        let unzigzagcr = self.inverse_zigzag(&wertecr);
+        let unzigzagcb = self.inverse_zigzag(&wertecb);
+
+
+        println!("");
+        //convert from dct to yuv
+        let y_blocks = self.inverse_fast_dct(&unzigzag);
+        let (cr,cb)= self.inverse_fast_dct_crcb(&unzigzagcr, &unzigzagcb);
+
+        // println!("Y DAnach WERTE:   {:?}", &y_blocks[0..64]);
 
         //convert from yuv blocks to linear
         let y_linear = self.block_linear_fast(&y_blocks);

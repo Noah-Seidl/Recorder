@@ -344,7 +344,7 @@ impl Capture{
         dct_vec.iter().map(|x|{ (*x).round() as i16}).collect()
     }
 
-    pub(crate) fn fast_dct_crcb(&self,cr:& Vec<u8>, cb: & Vec<u8>) -> (Vec<f32>,Vec<f32>)
+    pub(crate) fn fast_dct_crcb(&self,cr:& Vec<u8>, cb: & Vec<u8>) -> (Vec<i16>,Vec<i16>)
     {
         let mut dct_cr:Vec<f32> = Vec::with_capacity(cr.len() as usize);
         let mut dct_cb:Vec<f32> = Vec::with_capacity(cr.len() as usize);
@@ -366,7 +366,7 @@ impl Capture{
             dct_cb.extend_from_slice(&cb_block_f32);
         }
 
-        (dct_cr,dct_cb)
+        (dct_cr.iter().map(|x|{ (*x).round() as i16}).collect(),dct_cb.iter().map(|x|{ (*x).round() as i16}).collect())
     }
 
     pub(crate) fn inverse_fast_dct(&self,pixels:& Vec<i16>) ->Vec<u8>
@@ -389,15 +389,18 @@ impl Capture{
         yuv_dct
     }
 
-    pub(crate) fn inverse_fast_dct_crcb(&self,cr:& Vec<f32>, cb: & Vec<f32>) -> (Vec<u8>,Vec<u8>)
+    pub(crate) fn inverse_fast_dct_crcb(&self,cr:& Vec<i16>, cb: & Vec<i16>) -> (Vec<u8>,Vec<u8>)
     {
         let mut dct_cr:Vec<f32> = Vec::with_capacity(cr.len() as usize);
         let mut dct_cb:Vec<f32> = Vec::with_capacity(cb.len() as usize);
 
+        let cr_f32:Vec<f32> = cr.iter().map(|&x|{ x as f32}).collect();
+        let cb_f32:Vec<f32> = cb.iter().map(|&x|{ x as f32}).collect();
+
         //Könnte man mit par iter chunk warscheinlich um eineiges schneller machen threaded
         for block in (0..cr.len()).step_by(64){
-            let mut cr_block_f32 = cr[block..block+64].to_vec();
-            let mut cb_block_f32 = cb[block..block+64].to_vec(); 
+            let mut cr_block_f32 = cr_f32[block..block+64].to_vec();
+            let mut cb_block_f32 = cb_f32[block..block+64].to_vec(); 
 
             fast_dct::inverse_dct_quant(&mut cr_block_f32);
             fast_dct::inverse_dct_quant(&mut cb_block_f32);
@@ -427,10 +430,10 @@ impl Capture{
         zigzag
     }
 
-    pub(crate) fn inverse_zigzag(&self,vector:&Vec<i16>) ->Vec<f32>{
-        let mut zigzag = vec![0f32;vector.len()];
+    pub(crate) fn inverse_zigzag(&self,vector:&Vec<i16>) ->Vec<i16>{
+        let mut zigzag = vec![0i16;vector.len()];
         for i in 0..vector.len(){
-            zigzag[((i / 64) * 64) + ZIGZAG_ORDER[i%64]] = vector[i] as f32;
+            zigzag[((i / 64) * 64) + ZIGZAG_ORDER[i%64]] = vector[i];
         }
         zigzag
     }
@@ -477,6 +480,25 @@ impl Capture{
 
         rle
     }
+
+
+    pub(crate) fn rle_decoding(&self,vector:&Vec<(usize, i16)>) -> Vec<i16>{
+        let mut pixel:Vec<i16> = Vec::new();
+
+        for rle in vector{
+            if rle.0 == 17{
+                pixel.push(rle.1);
+            }else if *rle == (0,0) {
+                pixel.resize(pixel.len() + 64 - (pixel.len() % 64),0);
+            }else{
+                pixel.resize(pixel.len() + rle.0,0);
+                pixel.push(rle.1);
+            }
+        }
+
+        pixel
+    }
+
 
 
 

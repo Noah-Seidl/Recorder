@@ -211,3 +211,4 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
 
     map
 }
+

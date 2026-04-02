@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::mpsc, time::Instant, vec};
+use std::{collections::HashMap, net::UdpSocket, sync::mpsc, time::Instant, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
 
@@ -41,7 +41,8 @@ pub(crate) struct Capture {
     sender: mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>,
     pub(crate) second_last : u64,
     buffer_y: Vec<u8>,  //Statt immer wieder neuen vec zu erstellen einfach den buffer benutzen
-    huff_table:HashMap<(u8, u8),HuffCode>
+    huff_table:HashMap<(u8, u8),HuffCode>,
+    socket: UdpSocket,
 }
 
 
@@ -61,6 +62,7 @@ impl Capture{
             ycbcr: (Vec::new(), Vec::new(), Vec::new()) ,
             buffer_y: vec![0u8;RESULTING_RESOLUTION],
             huff_table: huffcode::jpeg_ac_luminance_table(),
+            socket: UdpSocket::bind("127.0.0.1:1236").unwrap(),
         })
     } 
 
@@ -500,15 +502,18 @@ impl Capture{
     }
 
 
+    pub(crate) fn send_packets(&self, y_rle:Vec<(usize, i16)>, cb_rle:Vec<(usize, i16)>, cr_rle:Vec<(usize, i16)>){
+
+        
 
 
-    fn categorie(&self, x:i16)->usize{
-        if x == 0{
-            0
-        }else{
-            (x.abs() as f32).log2().floor() as usize + 1
-        }
+
     }
+
+
+
+
+
 
 
 

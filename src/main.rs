@@ -15,6 +15,7 @@ mod fast_dct;
 mod capture;
 mod sdl_window;
 mod huffcode;
+mod bit_writer;
 
 impl GraphicsCaptureApiHandler for capture::Capture {
 

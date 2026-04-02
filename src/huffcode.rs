@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, net::UdpSocket};
 
 #[derive(Debug, Clone, Copy)]
 pub struct HuffCode {
@@ -11,6 +11,37 @@ impl HuffCode {
         Self { code, len }
     }
 }
+
+fn categorie(x:i16)->usize{
+    if x == 0{
+        0
+    }else{
+        (x.abs() as f32).log2().floor() as usize + 1
+    }
+}
+
+
+pub fn jpeg_dc_luminance_table() -> HashMap<u8, HuffCode>{
+    let mut map = HashMap::new();
+
+    map.insert(0, HuffCode { code: 0b00, len: 2 });
+    map.insert(1, HuffCode { code: 0b010, len: 3 });
+    map.insert(2, HuffCode { code: 0b011, len: 3 });
+    map.insert(3, HuffCode { code: 0b100, len: 3 });
+    map.insert(4, HuffCode { code: 0b101, len: 3 });
+    map.insert(5, HuffCode { code: 0b110, len: 3 });
+    map.insert(6, HuffCode { code: 0b1110, len: 4 });
+    map.insert(7, HuffCode { code: 0b11110, len: 5 });
+    map.insert(8, HuffCode { code: 0b111110, len: 6 });
+    map.insert(9, HuffCode { code: 0b1111110, len: 7 });
+    map.insert(10, HuffCode { code: 0b11111110, len: 8 });
+    map.insert(11, HuffCode { code: 0b111111110, len: 9 });
+
+    
+    map
+}
+
+
 
 pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
     let mut map = HashMap::new();
@@ -210,4 +241,16 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
     map.insert((0xF, 0xA), HuffCode::new(0b1111111111111110, 16));
 
     map
+}
+
+
+pub(crate) fn send_packets(socket:UdpSocket, frame_id: u8, y_rle:Vec<(usize, i16)>, cb_rle:Vec<(usize, i16)>, cr_rle:Vec<(usize, i16)>){
+
+    let mut counter = 0usize;
+
+    while counter < y_rle.len() {
+        
+
+    }
+
 }

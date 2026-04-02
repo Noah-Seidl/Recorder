@@ -12,7 +12,7 @@ struct EncodedSymbol{
 fn main() {
     let map = huffcode::jpeg_ac_luminance_table();
 
-    let x: (u8, i64) = (3,2);
+    let x: (u8, i64) = (15,1000);
 
     let mut y = 0u64;
 
@@ -47,6 +47,9 @@ fn main() {
 
     println!("BITS: {:032b} Länge: {}", bits.bits, bits.len);
     let mut writer = bit_writer::BitWriter::new();
+
+    writer.write_bits(bits.bits, bits.len);
+    writer.print_bits();
 
     writer.write_bits(bits.bits, bits.len);
 

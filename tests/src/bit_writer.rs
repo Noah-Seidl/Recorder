@@ -14,22 +14,27 @@ impl BitWriter{
 
     pub(crate) fn write_bits(&mut self, code:u32, len:u8)
     {
-        let mut newcode = code << 32 - len;
-        println!("VERSCHOBEN: {:032b}", newcode);
+        let newcode = code << (32 - len) - self.current;
+        let len = len - self.current;
+        println!("VERSCHOBEN123: {:032b} len: {}", newcode, len);
         for i in (len as usize/8 + 1..4).rev(){
+            
             self.buffer.push((newcode >> i * 8) as u8);
-            self.current = (i as u8 * 8 - len);
+            self.current = i as u8 * 8 - len;
+            println!("current: {}", self.current);
+            self.buffer_counter += 1;
         }
         self.current = 8 - self.current;
-
-
     }
 
     pub(crate) fn print_bits(&self){
+        println!("BUFFER:");
         for buf in &self.buffer{
             print!("{:08b}|", buf);
         }
-        println!("\nLänger: {}", self.current);
+        println!("\nLänge: {}", self.current);
+        println!("Size: {}", self.buffer_counter);
+
     }
 
 

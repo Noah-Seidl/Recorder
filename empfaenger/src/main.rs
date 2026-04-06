@@ -16,21 +16,13 @@ fn main() -> std::io::Result<()> {
 
         // Receives a single datagram message on the socket. If `buf` is too small to hold
         // the message, it will be cut off.
-        let mut buf = [0; 50];
+        let mut buf = [0; 1400];
         let (amt, src) = socket.recv_from(&mut buf)?;
 
         for (index, &buffer) in buf.iter().enumerate(){
             println!("BYTES BUF{}:\t{:08b}", index, buffer);
         }
 
-       let data =  Data{ 
-            len: buf[0] as u16 ^ buf[1] as u16,
-            fragment_id: buf[2],
-            frame_id: buf[3],
-            data: &buf[4..buf[0] as usize ^ buf[1] as usize] 
-        };
-
-        println!("{:?}", data);
 
         // Redeclare `buf` as slice of the received data and send reverse data back to origin.
         //let buf = &mut buf[..amt];

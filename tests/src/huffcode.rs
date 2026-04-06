@@ -12,8 +12,30 @@ impl HuffCode {
     }
 }
 
-pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
+
+pub fn jpeg_dc_luminance_table() -> HashMap<u8, HuffCode>{
     let mut map = HashMap::new();
+
+    map.insert(0, HuffCode { code: 0b00, len: 2 });
+    map.insert(1, HuffCode { code: 0b010, len: 3 });
+    map.insert(2, HuffCode { code: 0b011, len: 3 });
+    map.insert(3, HuffCode { code: 0b100, len: 3 });
+    map.insert(4, HuffCode { code: 0b101, len: 3 });
+    map.insert(5, HuffCode { code: 0b110, len: 3 });
+    map.insert(6, HuffCode { code: 0b1110, len: 4 });
+    map.insert(7, HuffCode { code: 0b11110, len: 5 });
+    map.insert(8, HuffCode { code: 0b111110, len: 6 });
+    map.insert(9, HuffCode { code: 0b1111110, len: 7 });
+    map.insert(10, HuffCode { code: 0b11111110, len: 8 });
+    map.insert(11, HuffCode { code: 0b111111110, len: 9 });
+
+    
+    map
+}
+
+
+pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
+    let mut map: HashMap<(u8, u8), HuffCode> = HashMap::new();
 
     // Run 0
     map.insert((0x0, 0x0), HuffCode::new(0b1010,             4));  // EOB
@@ -114,7 +136,7 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
 
     // Run 8
     map.insert((0x8, 0x1), HuffCode::new(0b111111000,        9));
-    map.insert((0x8, 0x2), HuffCode::new(0b111111111000000,  15)); // ⚠ 15 Bit laut Quelle – gegen ITU-T T.81 prüfen!
+    map.insert((0x8, 0x2), HuffCode::new(0b111111111000000,  15)); 
     map.insert((0x8, 0x3), HuffCode::new(0b1111111110110110, 16));
     map.insert((0x8, 0x4), HuffCode::new(0b1111111110110111, 16));
     map.insert((0x8, 0x5), HuffCode::new(0b1111111110111000, 16));
@@ -210,5 +232,33 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
     map.insert((0xF, 0xA), HuffCode::new(0b1111111111111110, 16));
 
     map
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct InvertedHuf{
+    pub huf_len: u8,
+    pub cat: u8,
+    pub run: u8
+}
+
+
+pub fn lut_ac(huf_map:&HashMap<(u8, u8), HuffCode>) ->Vec<InvertedHuf> {
+    let mut lut: Vec<InvertedHuf> = vec![InvertedHuf::default(); 1 << 16];
+    
+    for key in huf_map.keys(){
+        let value = huf_map.get(key).unwrap();
+        let len = value.len;
+        let cat:u32 = value.code <<( 16 - len);
+
+        for i in 0..1u32 << (16 - len){
+            let code = cat | i;
+            lut[code as usize] = InvertedHuf {
+                huf_len: value.len,
+                run:     key.0,
+                cat:     key.1,
+            }; 
+        }
+    }
+    lut
 }
 

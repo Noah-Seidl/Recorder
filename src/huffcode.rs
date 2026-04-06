@@ -12,7 +12,7 @@ impl HuffCode {
     }
 }
 
-fn categorie(x:i16)->usize{
+pub fn categorie(x:i16)->usize{
     if x == 0{
         0
     }else{
@@ -243,14 +243,52 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
     map
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct InvertedHuf{
+    pub huf_len: u8,
+    pub cat: u8,
+    pub run: u8
+}
 
-pub(crate) fn send_packets(socket:UdpSocket, frame_id: u8, y_rle:Vec<(usize, i16)>, cb_rle:Vec<(usize, i16)>, cr_rle:Vec<(usize, i16)>){
 
-    let mut counter = 0usize;
+pub fn lut_ac(huf_map:&HashMap<(u8, u8), HuffCode>) ->Vec<InvertedHuf> {
+    let mut lut: Vec<InvertedHuf> = vec![InvertedHuf::default(); 1 << 16];
+    
+    for key in huf_map.keys(){
+        let value = huf_map.get(key).unwrap();
+        let len = value.len;
+        let cat:u32 = value.code <<( 16 - len);
 
-    while counter < y_rle.len() {
-        
-
+        for i in 0..1u32 << (16 - len){
+            let code = cat | i;
+            lut[code as usize] = InvertedHuf {
+                huf_len: value.len,
+                run:     key.0,
+                cat:     key.1,
+            }; 
+        }
     }
+    lut
+}
 
+
+pub fn lut_dc(huf_map:&HashMap<u8, HuffCode>) -> Vec<InvertedHuf>{
+    let mut lut: Vec<InvertedHuf> = vec![InvertedHuf::default(); 1 << 16];
+    
+    for key in huf_map.keys(){
+        let value = huf_map.get(key).unwrap();
+        let len = value.len;
+        let cat:u32 = value.code <<( 16 - len);
+
+        for i in 0..1u32 << (16 - len){
+            let code = cat | i;
+            lut[code as usize] = InvertedHuf {
+                huf_len: value.len,
+                run:     0,
+                cat:     *key,
+            }; 
+        }
+    }
+    lut
+    
 }

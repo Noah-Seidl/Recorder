@@ -79,6 +79,10 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         let rlecr = self.rle_encoding(&zigzagcr);
         let rlecb = self.rle_encoding(&zigzagcb);
 
+        self.send_packets(&rle, &rlecb, &rlecr);
+
+
+
         println!("WERTE: {:?}", &rle[0..20]);
         
         let werte = self.rle_decoding(&rle);

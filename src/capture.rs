@@ -2,7 +2,7 @@ use std::{collections::HashMap, net::UdpSocket, sync::mpsc, time::Instant, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
 
-use crate::{fast_dct, huffcode::{self, HuffCode}};
+use crate::{bit_writer, fast_dct, huffcode::{self, HuffCode, InvertedHuf}};
 
 const BLOCK_SIZE: u32 = 8;
 
@@ -41,7 +41,11 @@ pub(crate) struct Capture {
     sender: mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>,
     pub(crate) second_last : u64,
     buffer_y: Vec<u8>,  //Statt immer wieder neuen vec zu erstellen einfach den buffer benutzen
-    huff_table:HashMap<(u8, u8),HuffCode>,
+    huff_table_dc:HashMap<u8,HuffCode>,
+    huff_table_ac:HashMap<(u8, u8),HuffCode>,
+    lut_ac: Vec<InvertedHuf>,
+    lut_dc: Vec<InvertedHuf>,
+    bit_writer: bit_writer::BitWriter,
     socket: UdpSocket,
 }
 
@@ -49,8 +53,8 @@ pub(crate) struct Capture {
 impl Capture{
 
     pub(crate) fn new(width:u32, height: u32, sender:mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-       
-
+        let dc_table= huffcode::jpeg_dc_luminance_table();
+        let ac_table = huffcode::jpeg_ac_luminance_table();
        
         Ok(Self {
             start: Instant::now(),
@@ -61,8 +65,12 @@ impl Capture{
             second_last: 0,
             ycbcr: (Vec::new(), Vec::new(), Vec::new()) ,
             buffer_y: vec![0u8;RESULTING_RESOLUTION],
-            huff_table: huffcode::jpeg_ac_luminance_table(),
             socket: UdpSocket::bind("127.0.0.1:1236").unwrap(),
+            lut_dc: huffcode::lut_dc(&dc_table),
+            lut_ac: huffcode::lut_ac(&ac_table), 
+            huff_table_dc: dc_table,
+            huff_table_ac: ac_table,
+            bit_writer: bit_writer::BitWriter::new(),
         })
     } 
 
@@ -502,16 +510,106 @@ impl Capture{
     }
 
 
-    pub(crate) fn send_packets(&self, y_rle:Vec<(usize, i16)>, cb_rle:Vec<(usize, i16)>, cr_rle:Vec<(usize, i16)>){
+    pub(crate) fn send_packets(&mut self, y_rle:&Vec<(usize, i16)>, cb_rle:&Vec<(usize, i16)>, cr_rle:&Vec<(usize, i16)>){
 
-        
+        let mut y_counter = 0;
+        let mut cb_counter = 0;
+        let mut old_cb_counter = 0;
+        let mut cr_counter  = 0;
+        let mut old_cr_counter = 0;
+        let mut old_y_counter = 0;
+        let mut over_max_size = false;
+        let mut packet_counter = 0;
+
+        for _ in 0..RESULTING_RESOLUTION / 4 {
+            let slice_end = self.bit_writer.getlen();
+            old_y_counter = y_counter;
+            old_cb_counter = cb_counter;
+            old_cr_counter = cr_counter;
 
 
+            let (counter, over) = self.blocks_to_bits(&y_rle, y_counter, 4);
+            y_counter = counter;
+            over_max_size |= over;
 
+            let (counter, over) = self.blocks_to_bits(&cb_rle, cb_counter, 1);
+            cb_counter = counter;
+            over_max_size |= over;
+
+            let (counter, over) = self.blocks_to_bits(&cr_rle, cr_counter, 1);
+            cr_counter = counter;
+            over_max_size |= over;
+
+            if over_max_size {
+                over_max_size = false;
+                y_counter = old_y_counter;
+                cb_counter = old_cb_counter;
+                cr_counter = old_cr_counter;
+
+                let packet = self.bit_writer.get_buffer()[0..slice_end].to_vec();
+                self.socket.send_to(&packet, "127.0.0.1:1234");
+
+                packet_counter += 1;
+            }
+        }
+
+        if self.bit_writer.getlen() > 0{
+            let packet = self.bit_writer.get_buffer().to_vec();
+            self.socket.send_to(&packet, "127.0.0.1:1234");
+        }
+
+        println!("PACKET_COUNTER: {}", packet_counter);
+    }
+
+   
+    fn blocks_to_bits(&mut self, rle:&Vec<(usize,i16)>, counter:usize, block_count: usize) -> (usize,bool){
+        let mut dc_counter = 0;
+        let mut huff_run = 0usize;
+        let mut huff;
+        let mut over_max_packet_size = false;
+        let mut counter = counter;
+
+        while dc_counter < block_count && huff_run != 17{
+            huff_run = rle[counter].0;
+            if huff_run == 17{
+                dc_counter += 1;
+                huff = self.rle_to_bits_dc(rle[counter]);
+            }else{
+                huff = self.rle_to_bits_ac(rle[counter]);
+            }
+            over_max_packet_size |= self.bit_writer.write_bits(huff.0 as u64, huff.1);
+        }
+
+        (counter, over_max_packet_size)
     }
 
 
 
+    fn rle_to_bits_ac(&self, rle:(usize,i16)) -> (u32, u8){    
+        let cat = huffcode::categorie(rle.1 as i16);
+        let huff = self.huff_table_ac.get(&(rle.0 as u8, cat as u8)).unwrap(); 
+        let mut y = (huff.code as u32) << cat;
+        if rle.1 > 0{
+            y = y | rle.1 as u32;
+        }else{
+            y = y | (rle.1 + (1i16 << cat) - 1) as u32;
+        }
+
+        (y,huff.len + cat as u8)
+    }
+
+    fn rle_to_bits_dc(&self, rle:(usize,i16)) -> (u32, u8){    
+        let cat = huffcode::categorie(rle.1 as i16);
+        let huff = self.huff_table_dc.get(&(cat as u8)).unwrap(); 
+        let mut y = (huff.code as u32) << cat;
+        if rle.1 > 0{
+            y = y | rle.1 as u32;
+        }else{
+            y = y | (rle.1 + (1i16 << cat) - 1) as u32;
+        }
+
+        (y,huff.len + cat as u8)
+    }
 
 
 

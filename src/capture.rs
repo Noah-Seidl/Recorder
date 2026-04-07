@@ -9,6 +9,8 @@ const BLOCK_SIZE: u32 = 8;
 const RESULTING_WIDTH:usize = 1920;
 const RESULTING_HEIGHT:usize = 1080;
 const RESULTING_RESOLUTION:usize = RESULTING_HEIGHT * RESULTING_WIDTH;
+const IP_ADDR:&str = "127.0.0.1:1234";
+
 const PI:f32 = std::f32::consts::PI;
 const MATRIX: [f32; 64] = [
     16.0, 11.0, 10.0, 16.0, 24.0, 40.0, 51.0, 61.0,
@@ -47,6 +49,7 @@ pub(crate) struct Capture {
     lut_dc: Vec<InvertedHuf>,
     bit_writer: bit_writer::BitWriter,
     socket: UdpSocket,
+    frame_id:u8,
 }
 
 
@@ -71,6 +74,7 @@ impl Capture{
             huff_table_dc: dc_table,
             huff_table_ac: ac_table,
             bit_writer: bit_writer::BitWriter::new(),
+            frame_id: 0,
         })
     } 
 
@@ -511,7 +515,7 @@ impl Capture{
 
 
     pub(crate) fn send_packets(&mut self, y_rle:&Vec<(usize, i16)>, cb_rle:&Vec<(usize, i16)>, cr_rle:&Vec<(usize, i16)>){
-
+        self.frame_id = self.frame_id.wrapping_add(1);
         let mut y_counter = 0;
         let mut cb_counter = 0;
         let mut old_cb_counter = 0;
@@ -519,9 +523,14 @@ impl Capture{
         let mut old_cr_counter = 0;
         let mut old_y_counter = 0;
         let mut over_max_size = false;
-        let mut packet_counter = 0;
+        let mut block_counter:u16 = 0;
+        let mut fragment_id = 0;
 
-        for _ in 0..RESULTING_RESOLUTION / 4 {
+
+            println!("Y blocks: {}, Cb blocks: {}, Cr blocks: {}", 
+        y_rle.len(), cb_rle.len(), cr_rle.len());
+        
+        while y_counter < y_rle.len() {
             let slice_end = self.bit_writer.getlen();
             old_y_counter = y_counter;
             old_cb_counter = cb_counter;
@@ -531,7 +540,7 @@ impl Capture{
             let (counter, over) = self.blocks_to_bits(&y_rle, y_counter, 4);
             y_counter = counter;
             over_max_size |= over;
-
+            //println!("COUNTER: {}", counter);
             let (counter, over) = self.blocks_to_bits(&cb_rle, cb_counter, 1);
             cb_counter = counter;
             over_max_size |= over;
@@ -540,25 +549,26 @@ impl Capture{
             cr_counter = counter;
             over_max_size |= over;
 
+
             if over_max_size {
                 over_max_size = false;
                 y_counter = old_y_counter;
                 cb_counter = old_cb_counter;
                 cr_counter = old_cr_counter;
-
                 let packet = self.bit_writer.get_buffer()[0..slice_end].to_vec();
-                self.socket.send_to(&packet, "127.0.0.1:1234");
-
-                packet_counter += 1;
+                self.udp_send(fragment_id, block_counter,packet);
+                fragment_id += 1;
+                block_counter = 0;
+            }else{
+                block_counter += 1;
             }
         }
 
         if self.bit_writer.getlen() > 0{
             let packet = self.bit_writer.get_buffer().to_vec();
-            self.socket.send_to(&packet, "127.0.0.1:1234");
+            self.udp_send(fragment_id, block_counter,packet);
         }
-
-        println!("PACKET_COUNTER: {}", packet_counter);
+        println!("FRAGMENTS: {}",fragment_id);
     }
 
    
@@ -569,7 +579,7 @@ impl Capture{
         let mut over_max_packet_size = false;
         let mut counter = counter;
 
-        while dc_counter < block_count && huff_run != 17{
+        while dc_counter < block_count && huff_run != 17 && counter < rle.len(){
             huff_run = rle[counter].0;
             if huff_run == 17{
                 dc_counter += 1;
@@ -578,6 +588,7 @@ impl Capture{
                 huff = self.rle_to_bits_ac(rle[counter]);
             }
             over_max_packet_size |= self.bit_writer.write_bits(huff.0 as u64, huff.1);
+            counter += 1;
         }
 
         (counter, over_max_packet_size)
@@ -612,7 +623,15 @@ impl Capture{
     }
 
 
-
+    fn udp_send(&self, fragment_id:u8,block_count:u16, data:Vec<u8>){
+        let mut buffer:Vec<u8> = Vec::new();
+        buffer.push(self.frame_id);
+        buffer.push(fragment_id);
+        buffer.push((block_count >> 8) as u8);
+        buffer.push(block_count as u8);
+        buffer.extend_from_slice(&data);
+        self.socket.send_to(&buffer,IP_ADDR).expect("FAiled udp");
+    }
 
 
 

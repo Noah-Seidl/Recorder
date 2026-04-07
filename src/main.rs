@@ -69,11 +69,11 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         let zigzagy = self.zigzag(&dct_values);
         let zigzagcr = self.zigzag(&cr);
         let zigzagcb = self.zigzag(&cb);
-
+/* 
         for i in (0..64).step_by(8){
             println!("DCT WERTE: {:?}", &zigzagy[i + 0..8 + i]);
         }
- 
+ */
 
         let rle = self.rle_encoding(&zigzagy);
         let rlecr = self.rle_encoding(&zigzagcr);
@@ -83,17 +83,17 @@ impl GraphicsCaptureApiHandler for capture::Capture {
 
 
 
-        println!("WERTE: {:?}", &rle[0..20]);
+       println!("WERTE: {:?}", &rle[0..20]);
         
         let werte = self.rle_decoding(&rle);
         let wertecr = self.rle_decoding(&rlecr);
         let wertecb = self.rle_decoding(&rlecb);
 
-
+/* 
         for i in (0..64).step_by(8){
             println!("DCT WERTE: {:?}", &werte[i + 0..8 + i]);
         }
-
+*/
         let unzigzag = self.inverse_zigzag(&werte);
         let unzigzagcr = self.inverse_zigzag(&wertecr);
         let unzigzagcb = self.inverse_zigzag(&wertecb);

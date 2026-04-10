@@ -243,7 +243,7 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
     map
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default,Debug)]
 pub struct InvertedHuf{
     pub huf_len: u8,
     pub cat: u8,
@@ -284,7 +284,7 @@ pub fn lut_dc(huf_map:&HashMap<u8, HuffCode>) -> Vec<InvertedHuf>{
             let code = cat | i;
             lut[code as usize] = InvertedHuf {
                 huf_len: value.len,
-                run:     0,
+                run:     17,
                 cat:     *key,
             }; 
         }

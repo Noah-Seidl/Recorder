@@ -25,13 +25,22 @@ fn main() {
     println!("DATALEN: {:b}", data.len >> 8);
     println!("DATALEN: {:b}", data.len & 0xFF);
 
+    buf[0] = 0b11111110;
+    buf[1] = 0b01111110;
 
+
+    let x = u16::from_be_bytes([buf[0], buf[1]]);
+    println!("{:016b}", x); 
+/*
     for (index, &buffer) in buf.iter().enumerate(){
         println!("BYTES BUF{}:\t{:08b}", index, buffer);
     }
     println!("{:?}", data);
 
-    send(buf);
+ */
+
+
+    //send(buf);
 
 }
 

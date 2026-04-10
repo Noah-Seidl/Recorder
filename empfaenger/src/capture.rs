@@ -1,9 +1,10 @@
 use std::{collections::HashMap, net::UdpSocket, sync::mpsc, time::Instant, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
-use sdl2::libc::printf;
+
 
 use crate::{bit_writer, fast_dct, huffcode::{self, HuffCode, InvertedHuf}};
+
 
 const BLOCK_SIZE: u32 = 8;
 
@@ -49,27 +50,25 @@ pub(crate) struct Capture {
     lut_ac: Vec<InvertedHuf>,
     lut_dc: Vec<InvertedHuf>,
     bit_writer: bit_writer::BitWriter,
-    socket: UdpSocket,
     frame_id:u8,
 }
 
 
 impl Capture{
 
-    pub(crate) fn new(width:u32, height: u32, sender:mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) fn new(sender:mpsc::SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let dc_table= huffcode::jpeg_dc_luminance_table();
         let ac_table = huffcode::jpeg_ac_luminance_table();
        
         Ok(Self {
             start: Instant::now(),
             counter: -1,
-            width,
-            height,
+            width: 1920,
+            height: 1080,
             sender,
             second_last: 0,
             ycbcr: (Vec::new(), Vec::new(), Vec::new()) ,
             buffer_y: vec![0u8;RESULTING_RESOLUTION],
-            socket: UdpSocket::bind("127.0.0.1:1236").unwrap(),
             lut_dc: huffcode::lut_dc(&dc_table),
             lut_ac: huffcode::lut_ac(&ac_table), 
             huff_table_dc: dc_table,
@@ -646,7 +645,7 @@ impl Capture{
         buffer.push((block_count >> 8) as u8);
         buffer.push(block_count as u8);
         buffer.extend_from_slice(&data);
-        self.socket.send_to(&buffer,IP_ADDR).expect("FAiled udp");
+        //self.socket.send_to(&buffer,IP_ADDR).expect("FAiled udp");
     }
 
 

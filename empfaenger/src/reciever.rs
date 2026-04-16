@@ -1,5 +1,4 @@
-use std::{collections::{BTreeMap, HashMap, btree_map::Values}, fmt::Error, fs::File, hash::Hash, net::UdpSocket, sync::mpsc::SyncSender, time::Instant};
-use std::io::Write;
+use std::{collections::{BTreeMap, HashMap}, fmt::Error, net::UdpSocket, sync::mpsc::SyncSender};
 
 use crate::{capture::Capture, huffcode::{self, InvertedHuf}};
 
@@ -8,7 +7,6 @@ pub struct Reciever{
     lut_ac: Vec<InvertedHuf>,
     lut_dc: Vec<InvertedHuf>,
     tx: SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>,
-    debug_file:File,
 }
 
 
@@ -24,7 +22,6 @@ impl Reciever{
                 lut_dc: huffcode::lut_dc(&dc_table),
                 lut_ac: huffcode::lut_ac(&ac_table),
                 tx, 
-                debug_file: File::create("debug_empfänger.txt").unwrap(),
             }
         )
     }
@@ -116,7 +113,7 @@ impl Reciever{
 
         let mut dc_counter = 0;
 
-        while true{
+        loop{
             let buffer_shifted = buffer.unbounded_shl(shift as u32);
 
             if run_counter == 0{
@@ -135,8 +132,7 @@ impl Reciever{
             //println!("{:?} \nValue: {} \n Buffer_shifted: {:064b}", huff_inverted, value, buffer_shifted);
 
             rle.push((huff_inverted.run as usize, value));
-            let x = (huff_inverted.run as usize, value);
-           // writeln!(self.debug_file,"{:?}", x).unwrap();
+            
 
             shift = huff_inverted.cat as u32 + huff_inverted.huf_len as u32 + shift;
 
@@ -192,13 +188,14 @@ impl Reciever{
         let y_linear = capture.block_linear_fast(&y_blocks);
         let (cr,cb)= capture.block_linear_fast_crcb(&cr, &cb);
 
-        self.tx.send((y_linear,cr,cb));
+        self.tx.send((y_linear,cr,cb)).unwrap();
     }
 
 
 
     pub fn reciever(&mut self)-> std::io::Result<()>{
         let socket = UdpSocket::bind("127.0.0.1:26262")?;
+        
         let mut allblocks = 0;
         let mut old_frame_id = 0;
         let mut counter = 0;
@@ -207,7 +204,7 @@ impl Reciever{
 
 
             let mut buf = [0; 1500];
-            let (amt, src) = socket.recv_from(&mut buf)?;
+            let (amt, _) = socket.recv_from(&mut buf)?;
 
             counter += 1;
 

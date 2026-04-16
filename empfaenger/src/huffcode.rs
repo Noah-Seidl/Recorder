@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::UdpSocket};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
 pub struct HuffCode {
@@ -12,6 +12,7 @@ impl HuffCode {
     }
 }
 
+#[allow(dead_code)]
 pub fn categorie(x:i16)->usize{
     if x == 0{
         0

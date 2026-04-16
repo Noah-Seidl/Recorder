@@ -1,29 +1,20 @@
-use std::{collections::HashMap, net::UdpSocket, sync::mpsc, time::Instant, vec};
+#![allow(dead_code)]
 
-use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
+use std::{collections::HashMap, sync::mpsc, time::Instant, vec};
+
+use rayon::{iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSliceMut};
 
 
 use crate::{bit_writer, fast_dct, huffcode::{self, HuffCode, InvertedHuf}};
 
 
-const BLOCK_SIZE: u32 = 8;
 
 const RESULTING_WIDTH:usize = 1920;
 const RESULTING_HEIGHT:usize = 1080;
 const RESULTING_RESOLUTION:usize = RESULTING_HEIGHT * RESULTING_WIDTH;
 const IP_ADDR:&str = "127.0.0.1:1234";
 
-const PI:f32 = std::f32::consts::PI;
-const MATRIX: [f32; 64] = [
-    16.0, 11.0, 10.0, 16.0, 24.0, 40.0, 51.0, 61.0,
-    12.0, 12.0, 14.0, 19.0, 26.0, 58.0, 60.0, 55.0,
-    14.0, 13.0, 16.0, 24.0, 40.0, 57.0, 69.0, 56.0,
-    14.0, 17.0, 22.0, 29.0, 51.0, 87.0, 80.0, 62.0,
-    18.0, 22.0, 37.0, 56.0, 68.0, 109.0, 103.0, 77.0,
-    24.0, 35.0, 55.0, 64.0, 81.0, 104.0, 113.0, 92.0,
-    49.0, 64.0, 78.0, 87.0, 103.0, 121.0, 120.0, 101.0,
-    72.0, 92.0, 95.0, 98.0, 112.0, 100.0, 103.0, 99.0,
-];
+
 
 const ZIGZAG_ORDER:[usize;64] = [
      0,  1,  8, 16,  9,  2,  3, 10,
@@ -104,8 +95,8 @@ impl Capture{
             let x_pos = index % RESULTING_WIDTH as usize;
             let y_pos = index / RESULTING_WIDTH as usize;
 
-            let dest_x = (x_pos as f32 * width_difference);
-            let dest_y = (y_pos as f32 * height_difference); 
+            let dest_x = x_pos as f32 * width_difference;
+            let dest_y = y_pos as f32 * height_difference; 
             let dest_pos = dest_x as u32 + dest_y as u32 * self.width;
 
             let mut r_average  = 0;
@@ -516,23 +507,19 @@ impl Capture{
 
     pub(crate) fn send_packets(&mut self, y_rle:&Vec<(usize, i16)>, cb_rle:&Vec<(usize, i16)>, cr_rle:&Vec<(usize, i16)>){
         self.frame_id = self.frame_id.wrapping_add(1);
-        let mut y_counter = 0;
+
+        let mut y_counter = 0; 
+        let mut old_y_counter;
         let mut cb_counter = 0;
-        let mut old_cb_counter = 0;
+        let mut old_cb_counter;
         let mut cr_counter  = 0;
-        let mut old_cr_counter = 0;
-        let mut old_y_counter = 0;
+        let mut old_cr_counter;
+
         let mut over_max_size = false;
         let mut block_counter:u32 = 0;
         let mut fragment_id = 0;
 
 
-            println!("Y blocks: {}, Cb blocks: {}, Cr blocks: {}", 
-        y_rle.len(), cb_rle.len(), cr_rle.len());
-
-            println!("RLE: {:?}", &y_rle[..8]);
-            println!("cbRLE: {:?}", &cb_rle[..8]);
-            println!("crRLE: {:?}", &cr_rle[..8]);
 
         while y_counter < y_rle.len() {
             let slice_end = self.bit_writer.getlen();

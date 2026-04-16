@@ -1,4 +1,4 @@
-use std::{sync::mpsc::{self, Receiver}, thread};
+use std::{sync::mpsc::{self}, thread};
 mod huffcode;
 mod sdl_window;
 mod reciever;
@@ -12,7 +12,7 @@ fn main() {
     let mut reciev = reciever::Reciever::new(tx).unwrap();
     
     thread::spawn(move || {
-         reciev.reciever();
+         reciev.reciever().unwrap();
     });
 
     sdl_window::start_window(rx);

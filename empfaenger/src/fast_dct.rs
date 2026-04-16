@@ -1,5 +1,5 @@
-use std::vec;
 //https://stackoverflow.com/questions/29215879/how-can-i-generalize-the-quantization-matrix-in-jpeg-compression
+#![allow(dead_code)]
 
 pub fn dct_quant(vector: &mut [f32]){
     transform_horizontal(vector);

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub(crate) struct BitWriter{
     buffer: Vec<u8>,
     buffer_counter:u32,

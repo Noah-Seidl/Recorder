@@ -1,6 +1,9 @@
 [package]
-name = "sender"
+name = "Recorder"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rayon = "1.11.0"
+sdl2 = "0.38.0"
+windows-capture = "1.5.0"

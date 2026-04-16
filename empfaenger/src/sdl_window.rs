@@ -10,7 +10,7 @@ pub fn start_window(rx:Receiver<(Vec<u8>, Vec<u8>, Vec<u8>)>){
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
-    let window = video_subsystem.window("rust-sdl2 demo", RESULTING_WIDTH, RESULTING_HEIGHT)
+    let window = video_subsystem.window("Empfänger", RESULTING_WIDTH, RESULTING_HEIGHT)
         .position(0, 400)
         .build()
         .unwrap();

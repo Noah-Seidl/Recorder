@@ -1,8 +1,7 @@
-use std::{collections::HashMap, net::UdpSocket, sync::mpsc, time::Instant, vec};
+use std::{collections::HashMap, fs::File, net::UdpSocket, sync::mpsc, thread, time::{Duration, Instant}, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
-use sdl2::libc::printf;
-
+use std::io::Write;
 use crate::{bit_writer, fast_dct, huffcode::{self, HuffCode, InvertedHuf}};
 
 const BLOCK_SIZE: u32 = 8;
@@ -10,7 +9,7 @@ const BLOCK_SIZE: u32 = 8;
 const RESULTING_WIDTH:usize = 1920;
 const RESULTING_HEIGHT:usize = 1080;
 const RESULTING_RESOLUTION:usize = RESULTING_HEIGHT * RESULTING_WIDTH;
-const IP_ADDR:&str = "127.0.0.1:1234";
+const IP_ADDR:&str = "127.0.0.1:26262";
 
 const PI:f32 = std::f32::consts::PI;
 const MATRIX: [f32; 64] = [
@@ -50,7 +49,8 @@ pub(crate) struct Capture {
     lut_dc: Vec<InvertedHuf>,
     bit_writer: bit_writer::BitWriter,
     socket: UdpSocket,
-    frame_id:u8,
+    frame_id:u16,
+    debug_file:File,
 }
 
 
@@ -69,13 +69,14 @@ impl Capture{
             second_last: 0,
             ycbcr: (Vec::new(), Vec::new(), Vec::new()) ,
             buffer_y: vec![0u8;RESULTING_RESOLUTION],
-            socket: UdpSocket::bind("127.0.0.1:1236").unwrap(),
+            socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
             lut_dc: huffcode::lut_dc(&dc_table),
             lut_ac: huffcode::lut_ac(&ac_table), 
             huff_table_dc: dc_table,
             huff_table_ac: ac_table,
             bit_writer: bit_writer::BitWriter::new(),
             frame_id: 0,
+            debug_file: File::create("debug_sender.txt").unwrap(),
         })
     } 
 
@@ -514,6 +515,35 @@ impl Capture{
         pixel
     }
 
+    fn rle_mixed(&mut self, y_rle:&Vec<(usize, i16)>, cb_rle:&Vec<(usize, i16)>, cr_rle:&Vec<(usize, i16)>){
+        let mut y_counter = 0;
+        let mut cb_counter = 0;
+        let mut cr_counter  = 0;
+
+        while y_counter < y_rle.len(){
+            for _ in 0..4{
+                self.helper(y_rle,&mut y_counter);
+            }
+            self.helper(cb_rle,&mut cb_counter);
+            self.helper(cr_rle,&mut cr_counter);
+
+        }
+        
+    }
+
+    fn helper(&mut self, rle:&Vec<(usize, i16)>,counter:&mut usize){
+        if *counter >= rle.len(){return}
+
+        let mut x = rle[*counter];
+        *counter += 1;
+        while *counter < rle.len(){
+           // writeln!(self.debug_file, "{:?}", x).unwrap();
+            if rle[*counter].0 == 17{break;}
+            x = rle[*counter];
+            *counter += 1;
+        }
+    }
+
 
     pub(crate) fn send_packets(&mut self, y_rle:&Vec<(usize, i16)>, cb_rle:&Vec<(usize, i16)>, cr_rle:&Vec<(usize, i16)>){
         self.frame_id = self.frame_id.wrapping_add(1);
@@ -527,13 +557,10 @@ impl Capture{
         let mut block_counter:u32 = 0;
         let mut fragment_id = 0;
 
+        //self.rle_mixed(y_rle, cb_rle, cr_rle);
 
-            println!("Y blocks: {}, Cb blocks: {}, Cr blocks: {}", 
+       println!("Y blocks: {}, Cb blocks: {}, Cr blocks: {}", 
         y_rle.len(), cb_rle.len(), cr_rle.len());
-
-            println!("RLE: {:?}", &y_rle[..8]);
-            println!("cbRLE: {:?}", &cb_rle[..8]);
-            println!("crRLE: {:?}", &cr_rle[..8]);
 
         while y_counter < y_rle.len() {
             let slice_end = self.bit_writer.getlen();
@@ -555,14 +582,15 @@ impl Capture{
 
 
             if over_max_size {
-                //println!("END");
+               // println!("Packet");
                 over_max_size = false;
                 y_counter = old_y_counter;
                 cb_counter = old_cb_counter;
                 cr_counter = old_cr_counter;
                 let packet = self.bit_writer.get_buffer()[0..slice_end].to_vec();
-                
+                //writeln!(self.debug_file,"Counter ,").unwrap();
 
+                
                 self.udp_send(fragment_id, block_counter as u16,packet);
               
                 fragment_id += 1;
@@ -577,7 +605,8 @@ impl Capture{
             self.udp_send(fragment_id, block_counter as u16,packet);
         }
         println!("FRAGMENTS: {}",fragment_id);
-  
+
+        
     }
 
    
@@ -597,6 +626,7 @@ impl Capture{
 
             //println!("BB: {}", block_count);
             //print!("{:?}, ", rle[counter]);
+            //writeln!(self.debug_file,"{:?},", rle[counter]).unwrap();
             if huff_run == 17{
                 dc_counter += 1;
                 huff = self.rle_to_bits_dc(rle[counter]);
@@ -640,13 +670,17 @@ impl Capture{
 
 
     fn udp_send(&self, fragment_id:u8,block_count:u16, data:Vec<u8>){
+        
         let mut buffer:Vec<u8> = Vec::new();
-        buffer.push(self.frame_id);
+
+        buffer.push((self.frame_id >> 8) as u8);
+        buffer.push(self.frame_id as u8);
         buffer.push(fragment_id);
         buffer.push((block_count >> 8) as u8);
         buffer.push(block_count as u8);
         buffer.extend_from_slice(&data);
         self.socket.send_to(&buffer,IP_ADDR).expect("FAiled udp");
+        thread::sleep(Duration::from_micros(10));
     }
 
 

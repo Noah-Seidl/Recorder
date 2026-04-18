@@ -1,7 +1,8 @@
-use std::{collections::HashMap, fs::File, net::UdpSocket, sync::mpsc, thread, time::{Duration, Instant}, vec};
+#![allow(dead_code)]
 
-use rayon::{iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::{ParallelSlice, ParallelSliceMut}};
-use std::io::Write;
+use std::{collections::HashMap, fs::File, io, net::UdpSocket, sync::mpsc, thread, time::{Duration, Instant}, vec};
+
+use rayon::{iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSliceMut};
 use crate::{bit_writer, fast_dct, huffcode::{self, HuffCode, InvertedHuf}};
 
 const BLOCK_SIZE: u32 = 8;
@@ -51,6 +52,7 @@ pub(crate) struct Capture {
     socket: UdpSocket,
     frame_id:u16,
     debug_file:File,
+    ip_address: String,
 }
 
 
@@ -60,6 +62,21 @@ impl Capture{
         let dc_table= huffcode::jpeg_dc_luminance_table();
         let ac_table = huffcode::jpeg_ac_luminance_table();
        
+        let mut input = String::new();
+
+        println!("Geben sie die Ziel Ip adresse mit Port ein: ");
+
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Fehler beim Lesen");
+
+        input = input.trim().to_string();
+
+        if input.is_empty(){
+            input = "127.0.0.1:26262".to_string();
+        }
+
+
         Ok(Self {
             start: Instant::now(),
             counter: -1,
@@ -77,6 +94,7 @@ impl Capture{
             bit_writer: bit_writer::BitWriter::new(),
             frame_id: 0,
             debug_file: File::create("debug_sender.txt").unwrap(),
+            ip_address: input,
         })
     } 
 
@@ -106,8 +124,8 @@ impl Capture{
             let x_pos = index % RESULTING_WIDTH as usize;
             let y_pos = index / RESULTING_WIDTH as usize;
 
-            let dest_x = (x_pos as f32 * width_difference);
-            let dest_y = (y_pos as f32 * height_difference); 
+            let dest_x = x_pos as f32 * width_difference;
+            let dest_y = y_pos as f32 * height_difference; 
             let dest_pos = dest_x as u32 + dest_y as u32 * self.width;
 
             let mut r_average  = 0;
@@ -549,18 +567,14 @@ impl Capture{
         self.frame_id = self.frame_id.wrapping_add(1);
         let mut y_counter = 0;
         let mut cb_counter = 0;
-        let mut old_cb_counter = 0;
+        let mut old_cb_counter;
         let mut cr_counter  = 0;
-        let mut old_cr_counter = 0;
-        let mut old_y_counter = 0;
+        let mut old_cr_counter;
+        let mut old_y_counter;
         let mut over_max_size = false;
         let mut block_counter:u32 = 0;
         let mut fragment_id = 0;
 
-        //self.rle_mixed(y_rle, cb_rle, cr_rle);
-
-       println!("Y blocks: {}, Cb blocks: {}, Cr blocks: {}", 
-        y_rle.len(), cb_rle.len(), cr_rle.len());
 
         while y_counter < y_rle.len() {
             let slice_end = self.bit_writer.getlen();
@@ -572,7 +586,6 @@ impl Capture{
             let (counter, over) = self.blocks_to_bits(&y_rle, y_counter, 4);
             y_counter = counter;
             over_max_size |= over;
-            //println!("COUNTER: {}", counter);
             let (counter, over) = self.blocks_to_bits(&cb_rle, cb_counter, 1);
             cb_counter = counter;
             over_max_size |= over;
@@ -582,13 +595,11 @@ impl Capture{
 
 
             if over_max_size {
-               // println!("Packet");
                 over_max_size = false;
                 y_counter = old_y_counter;
                 cb_counter = old_cb_counter;
                 cr_counter = old_cr_counter;
                 let packet = self.bit_writer.get_buffer()[0..slice_end].to_vec();
-                //writeln!(self.debug_file,"Counter ,").unwrap();
 
                 
                 self.udp_send(fragment_id, block_counter as u16,packet);
@@ -604,8 +615,6 @@ impl Capture{
             let packet = self.bit_writer.get_buffer().to_vec();
             self.udp_send(fragment_id, block_counter as u16,packet);
         }
-        println!("FRAGMENTS: {}",fragment_id);
-
         
     }
 
@@ -624,9 +633,6 @@ impl Capture{
                 break;
             }
 
-            //println!("BB: {}", block_count);
-            //print!("{:?}, ", rle[counter]);
-            //writeln!(self.debug_file,"{:?},", rle[counter]).unwrap();
             if huff_run == 17{
                 dc_counter += 1;
                 huff = self.rle_to_bits_dc(rle[counter]);
@@ -679,8 +685,8 @@ impl Capture{
         buffer.push((block_count >> 8) as u8);
         buffer.push(block_count as u8);
         buffer.extend_from_slice(&data);
-        self.socket.send_to(&buffer,IP_ADDR).expect("FAiled udp");
-        thread::sleep(Duration::from_micros(10));
+        self.socket.send_to(&buffer,self.ip_address.clone()).expect("FAiled udp");
+        thread::sleep(Duration::from_nanos(10));
     }
 
 

@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap}, fmt::Error, net::UdpSocket, sync::mpsc::SyncSender};
+use std::{collections::{BTreeMap, HashMap}, fmt::Error, io, net::UdpSocket, sync::mpsc::SyncSender, time::{Instant, SystemTime, UNIX_EPOCH}};
 
 use crate::{capture::Capture, huffcode::{self, InvertedHuf}};
 
@@ -6,8 +6,17 @@ pub struct Reciever{
     frame_map: HashMap<u16,BTreeMap<u8,Vec<(usize,i16)>>>,
     lut_ac: Vec<InvertedHuf>,
     lut_dc: Vec<InvertedHuf>,
+    now: u128,
+    old: u128,
     tx: SyncSender<(Vec<u8>,Vec<u8>,Vec<u8>)>,
 }
+
+    fn get_time() -> u128{
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    }
 
 
 impl Reciever{
@@ -21,12 +30,15 @@ impl Reciever{
                 frame_map: HashMap::new(),
                 lut_dc: huffcode::lut_dc(&dc_table),
                 lut_ac: huffcode::lut_ac(&ac_table),
-                tx, 
+                tx,
+                now: get_time(),
+                old: get_time(), 
             }
         )
     }
 
-    fn packets_to_frame(&mut self,frame_id:u16, fragment_id:u8, data:&Vec<u8>, block_count:u16){
+
+    fn packets_to_frame(&mut self,frame_id:u16, fragment_id:u8, data:&Vec<u8>, block_count:u16, all_blocks:u16){
         let rle: Vec<(usize, i16)> = self.huff_decoding_new(data, block_count);
         
         //println!("RLE: {:?}\n", &rle[rle.len()- 100..rle.len()]);
@@ -34,11 +46,18 @@ impl Reciever{
         if self.frame_map.contains_key(&frame_id){
             let fragment_map: &mut BTreeMap<u8, Vec<(usize, i16)>> = self.frame_map.get_mut(&frame_id).unwrap();
             fragment_map.insert(fragment_id, rle);
-        }else{
-            if frame_id > 4 && fragment_id > 80{
-                self.frame_from_fragments(frame_id - 4);
-                self.frame_map.remove(&(frame_id - 4));
+
+            if all_blocks >= 48600{
+                self.frame_from_fragments(frame_id);
+                self.frame_map.remove(&(frame_id));
+
+                self.now = get_time();
+                let delta = (self.now - self.old) as f32 / 1000.0;
+                let fps = 1.0 / delta;
+                println!("FPS: {:.1}", fps);
+                self.old = self.now;
             }
+        }else{
             let mut map:BTreeMap<u8,Vec<(usize,i16)>> = BTreeMap::new();
             map.insert(fragment_id, rle);
             self.frame_map.insert(frame_id, map);
@@ -80,8 +99,7 @@ impl Reciever{
             }
         }
 
-       println!("Y blocks: {}, Cb blocks: {}, Cr blocks: {}", 
-        y_rle.len(), cb_rle.len(), cr_rle.len());
+
         self.to_y_cb_cr(y_rle, cb_rle, cr_rle);
     }
 
@@ -104,6 +122,11 @@ impl Reciever{
         let mut rle:Vec<(usize, i16)> = Vec::new();
         let mut huff_inverted:InvertedHuf;
 
+
+        if data.len() < 8
+        {
+            return rle;
+        }
 
         let mut buffer:u64 = u64::from_be_bytes(data[0..8].try_into().unwrap());
         let mut buffer_counter = 8;
@@ -194,19 +217,35 @@ impl Reciever{
 
 
     pub fn reciever(&mut self)-> std::io::Result<()>{
-        let socket = UdpSocket::bind("127.0.0.1:26262")?;
+        println!("Welcher Port soll verwendet werden:");
+
+        let mut input = String::new();
+
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Fehler beim Lesen");
+
+        input = input.trim().to_string();
+
+        if input.is_empty(){
+            input = "26262".to_string();
+        }
+
+        println!("IP: 0.0.0.0:{} wird verwendet", input);
+
+        let socket = UdpSocket::bind(format!("0.0.0.0:{}",input))?;
         
         let mut allblocks = 0;
         let mut old_frame_id = 0;
-        let mut counter = 0;
-        let mut old_fragment_id = 0;
+
+
+
         loop{
-
-
+        
+           
             let mut buf = [0; 1500];
             let (amt, _) = socket.recv_from(&mut buf)?;
 
-            counter += 1;
 
             let frame_id = ((buf[0] as u16) << 8)  |(buf[1] as u16);
             let fragment_id = buf[2];
@@ -215,31 +254,15 @@ impl Reciever{
             let data = &buf[5..amt].to_vec();
 
             if old_frame_id != frame_id{
-                println!("Frame_id: {}  | Fragment_id: {} | block_count: {} | length: {} | gesBlocks: {} | counterFragments: {}",frame_id, old_fragment_id,block_count, amt, allblocks, counter);
-                allblocks = 0;
-                counter = 0;
+               // println!("Frame_id: {}  | Fragment_id: {} | block_count: {} | length: {} | gesBlocks: {} | counterFragments: {}",frame_id, old_fragment_id,block_count, amt, allblocks, counter);
+                allblocks = 0;             
             }
 
             allblocks += block_count;
 
-         //   println!("Frame_id: {}  | Fragment_id: {} | block_count: {} | length: {} | gesBlocks: {}",frame_id, fragment_id,block_count, amt, allblocks);
-            
-                //println!("data: {:08b}", data[0]);
-                //let mut buffer:u64 = u64::from_be_bytes(data[0..8].try_into().unwrap());
-                //println!("datau64: {:08b}", buffer);
-              //  println!();
-/*
-                for bits in data{
-                    print!("{:08b}", bits);
-                }
 
- */
+            self.packets_to_frame(frame_id, fragment_id, data, block_count, allblocks);
 
-              //  println!();
-                self.packets_to_frame(frame_id, fragment_id, data, block_count);
-                //let x = self.huff_decoding_new(data, block_count);
-                //println!("RLE: {:?}", x);
-               old_fragment_id =  fragment_id;
             old_frame_id = frame_id;
         }
 

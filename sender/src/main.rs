@@ -1,6 +1,6 @@
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use windows_capture::capture::{Context, GraphicsCaptureApiHandler};
 use windows_capture::frame::Frame;
@@ -127,7 +127,6 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         if self.start.elapsed().as_secs() != self.second_last{
             self.second_last = self.start.elapsed().as_secs();
             println!("FPS: {}", self.counter);
-            println!("Berechnung: {}ms",1);
             self.counter = 0;
         }
         Ok(())
@@ -168,7 +167,7 @@ let settings = Settings::new(
     // Secondary window settings, if you want to include secondary windows in the capture
     SecondaryWindowSettings::Default,
     // Minimum update interval, if you want to change the frame rate limit (default is 60 FPS or 16.67 ms)
-    MinimumUpdateIntervalSettings::Custom(Duration::from_millis(300)),
+    MinimumUpdateIntervalSettings::Custom(Duration::from_millis(16)),
     // Dirty region settings,
     DirtyRegionSettings::ReportOnly,
     // The desired color format for the captured frame.

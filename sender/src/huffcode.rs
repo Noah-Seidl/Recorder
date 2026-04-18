@@ -1,4 +1,6 @@
-use std::{collections::HashMap, net::UdpSocket};
+#![allow(dead_code)]
+
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
 pub struct HuffCode {

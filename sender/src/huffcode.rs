@@ -147,7 +147,7 @@ pub fn jpeg_ac_luminance_table() -> HashMap<(u8, u8), HuffCode> {
 
     // Run 8
     map.insert((0x8, 0x1), HuffCode::new(0b111111000,        9));
-    map.insert((0x8, 0x2), HuffCode::new(0b111111111000000,  15)); // ⚠ 15 Bit laut Quelle – gegen ITU-T T.81 prüfen!
+    map.insert((0x8, 0x2), HuffCode::new(0b111111111000000,  15)); 
     map.insert((0x8, 0x3), HuffCode::new(0b1111111110110110, 16));
     map.insert((0x8, 0x4), HuffCode::new(0b1111111110110111, 16));
     map.insert((0x8, 0x5), HuffCode::new(0b1111111110111000, 16));

@@ -1,6 +1,6 @@
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use windows_capture::capture::{Context, GraphicsCaptureApiHandler};
 use windows_capture::frame::Frame;
@@ -46,24 +46,46 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         self.width  = frame.width();
         self.height = frame.height();
 
+        let berechnungsdauer = Instant::now();
+
+        
+
+
+        let buffer_time = Instant::now();
+
         let mut data = frame.buffer()?;
 
-
-
+        
 
         let raw: &mut [u8] = data.as_nopadding_buffer()?;
 
 
+        let buffer_time = buffer_time.elapsed().as_millis();
+
+        let yuvconvert_time = Instant::now();
+
         //convert from rgb to yuv
         self.convert_rgbto_yuv_threaded(&raw);
+
+        let yuvconvert_time = yuvconvert_time.elapsed().as_millis();
+
+        let convertblocks_time = Instant::now();
 
         //convert from linear to block res
         let blocks:Vec<u8> = self.linear_block_fast(&self.ycbcr.0);
         let (cr,cb)= self.linear_block_fast_crcb(& self.ycbcr.1, & self.ycbcr.2);
 
+        let convertblocks_time = convertblocks_time.elapsed().as_millis();
+
+        let convertdct_timer = Instant::now();
+
         //convert from yuv to dct values
         let dct_values= self.fast_dct(&blocks);
         let (cr,cb)= self.fast_dct_crcb(&cr, &cb);
+
+        let convertdct_timer = convertdct_timer.elapsed().as_millis();
+
+        let convertzigzag_time = Instant::now();
 
         //zigzag
         let zigzagy = self.zigzag(&dct_values);
@@ -75,13 +97,28 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         }
  */
 
+        let convertzigzag_time = convertzigzag_time.elapsed().as_millis();
+
+        let convertrle_time = Instant::now();
+
         let rle = self.rle_encoding(&zigzagy);
         let rlecr = self.rle_encoding(&zigzagcr);
         let rlecb = self.rle_encoding(&zigzagcb);
 
+        let convertrle_time = convertrle_time.elapsed().as_millis();
+
+        let send_time = Instant::now();
+
         self.send_packets(&rle, &rlecb, &rlecr);
 
-        
+
+        let send_time = send_time.elapsed().as_millis();
+
+        let end = berechnungsdauer.elapsed().as_millis();
+
+
+
+        /* 
         let werte = self.rle_decoding(&rle);
         let wertecr = self.rle_decoding(&rlecr);
         let wertecb = self.rle_decoding(&rlecb);
@@ -110,7 +147,7 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         self.ycbcr.1 = cr;
         self.ycbcr.2 = cb;
         self.ycbcr.0 = y_linear;
-
+*/
         //self.linear_to_block_cb_cr(&self.ycbcr.1,&self.ycbcr.2);
        // self.dct_transformation();
 
@@ -127,6 +164,8 @@ impl GraphicsCaptureApiHandler for capture::Capture {
         if self.start.elapsed().as_secs() != self.second_last{
             self.second_last = self.start.elapsed().as_secs();
             println!("FPS: {}", self.counter);
+            println!("Dauer: {}", end);
+            println!("Buffer_timer: {} yuvconvert: {} convertblocks: {} convertdct: {} convertzigzag: {} convertrle: {} send: {}",buffer_time,yuvconvert_time,convertblocks_time,convertdct_timer,convertzigzag_time,convertrle_time,send_time);
             self.counter = 0;
         }
         Ok(())

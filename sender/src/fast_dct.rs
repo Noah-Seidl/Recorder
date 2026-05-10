@@ -142,7 +142,7 @@ pub fn inverse_transform(vector: &mut [f32]) {
     let v8 = (v15 + v16) / 2.0;
     let v9 = (v15 - v16) / 2.0;
     
-    let v18 = (v19 - v20) * A[5];  // Different from original
+    let v18 = (v19 - v20) * A[5]; 
     let v12 = (v19 * A[4] - v18) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
     let v14 = (v18 - v20 * A[2]) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
     
@@ -192,7 +192,7 @@ pub fn inverse_horizontal(vector: &mut [f32]){
         let v8 = (v15 + v16) / 2.0;
         let v9 = (v15 - v16) / 2.0;
         
-        let v18 = (v19 - v20) * A[5];  // Different from original
+        let v18 = (v19 - v20) * A[5]; 
         let v12 = (v19 * A[4] - v18) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
         let v14 = (v18 - v20 * A[2]) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
         
@@ -244,7 +244,7 @@ pub fn inverse_vertical(vector: &mut [f32]){
         let v8 = (v15 + v16) / 2.0;
         let v9 = (v15 - v16) / 2.0;
         
-        let v18 = (v19 - v20) * A[5];  // Different from original
+        let v18 = (v19 - v20) * A[5];  
         let v12 = (v19 * A[4] - v18) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
         let v14 = (v18 - v20 * A[2]) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
         

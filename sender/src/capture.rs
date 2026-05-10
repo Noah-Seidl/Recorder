@@ -686,7 +686,7 @@ impl Capture{
         buffer.push(block_count as u8);
         buffer.extend_from_slice(&data);
         self.socket.send_to(&buffer,self.ip_address.clone()).expect("FAiled udp");
-        thread::sleep(Duration::from_nanos(10));
+        //thread::sleep(Duration::from_nanos(10));
     }
 
 
